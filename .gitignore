@@ -4,5 +4,7 @@ node_modules/
 .vercel/
 .env
 .env.local
+.env.example
+.env*
 .env*.local
 dev-server.log
