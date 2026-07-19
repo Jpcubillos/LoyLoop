@@ -172,7 +172,7 @@ export function AuthForm() {
           {mode === "client"
             ? "Crea tu cuenta o inicia sesion para ver tus beneficios."
             : mode === "team"
-              ? "Solo para duenios, administradores y cajeros creados por el comercio."
+              ? "Solo para dueños, administradores y cajeros creados por el comercio."
               : "Dejanos tus datos y te contactamos para activar tu negocio."}
         </p>
       </div>
@@ -229,7 +229,7 @@ export function AuthForm() {
         <div className="grid gap-4">
           <AuthFields email={email} password={password} setEmail={setEmail} setPassword={setPassword} />
           <p className="rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-800">
-            Los administradores y cajeros se crean desde Configuracion por el duenio del comercio.
+            Los administradores y cajeros se crean desde Configuracion por el dueño del comercio.
           </p>
           {feedback && <p className="rounded-lg bg-slate-50 p-3 text-sm text-muted">{feedback}</p>}
           <button className="btn-primary h-11" onClick={submitAuth} disabled={loading}>
@@ -241,7 +241,7 @@ export function AuthForm() {
       {mode === "business" && (
         <div className="grid gap-4">
           <label className="grid gap-1 text-sm font-bold">
-            Nombre del duenio
+            Nombre del dueños
             <input className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal outline-none focus:border-brand-500" value={ownerName} onChange={(event) => setOwnerName(event.target.value)} />
           </label>
           <label className="grid gap-1 text-sm font-bold">

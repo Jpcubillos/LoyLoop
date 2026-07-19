@@ -4,7 +4,7 @@ import { getAppUsers } from "@/lib/data/app-users";
 import { getBusinessSettings } from "@/lib/data/dashboard";
 
 const businessRoles = [
-  { value: "owner", label: "Duenio" },
+  { value: "owner", label: "Dueño" },
   { value: "manager", label: "Administrador" },
   { value: "cashier", label: "Cajero" }
 ];
@@ -70,7 +70,7 @@ export default async function ConfiguracionPage() {
               <button className="btn-primary h-10 text-xs">Crear usuario</button>
             </form>
             <p className="mb-4 text-xs leading-5 text-muted">
-              El duenio crea aqui administradores y cajeros del comercio. Para login real, ese correo tambien debe existir en Supabase Auth.
+              El dueños crea aqui administradores y cajeros del comercio. Para login real, ese correo tambien debe existir en Supabase Auth.
             </p>
             <div className="grid gap-3">
               {users.map((user) => (

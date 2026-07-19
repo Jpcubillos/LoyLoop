@@ -14,3 +14,5 @@
  GET /login 200 in 2624ms
  GET /login?next=%2Fdashboard 200 in 546ms
  ✓ Compiled in 2.7s (712 modules)
+ ✓ Compiled in 621ms (712 modules)
+ GET /login?next=%2Fdashboard 200 in 447ms
