@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Building2, Store, UserRound } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
@@ -18,6 +18,7 @@ const clientDemoUsers = [
 
 export function AuthForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<AuthMode>("client");
   const [clientAuthMode, setClientAuthMode] = useState<"login" | "signup">("signup");
   const [email, setEmail] = useState("cliente.activo@loyloop.app");
@@ -31,24 +32,110 @@ export function AuthForm() {
   const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
+  async function ensureCustomerProfile(userEmail: string) {
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const defaultName = cleanEmail.split("@")[0]?.replace(/[._-]/g, " ") || "Cliente LoyLoop";
+
+    const { data: existingCustomer, error: customerLookupError } = await db
+      .from("customer_profiles")
+      .select("id")
+      .eq("email", cleanEmail)
+      .maybeSingle();
+
+    if (customerLookupError) throw customerLookupError;
+
+    const customer = existingCustomer
+      ? existingCustomer
+      : (await db
+          .from("customer_profiles")
+          .insert({
+            full_name: defaultName,
+            email: cleanEmail
+          })
+          .select("id")
+          .single()).data;
+
+    if (!customer?.id) throw new Error("No se pudo crear el perfil del cliente.");
+
+    const { error: appUserError } = await db.from("app_users").upsert({
+      email: cleanEmail,
+      full_name: defaultName,
+      account_type: "customer",
+      business_id: null,
+      customer_id: customer.id,
+      business_role: null,
+      customer_segment: "active",
+      active: true
+    }, { onConflict: "email" });
+
+    if (appUserError) throw appUserError;
+  }
+
+  async function getAppUser(userEmail: string) {
+    const { data, error } = await db
+      .from("app_users")
+      .select("account_type, business_role, active")
+      .eq("email", userEmail.trim().toLowerCase())
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
+
   async function submitAuth() {
     setLoading(true);
     setFeedback("");
 
+    const cleanEmail = email.trim().toLowerCase();
     const result = clientAuthMode === "login" || mode === "team"
-      ? await supabase.auth.signInWithPassword({ email, password })
-      : await supabase.auth.signUp({ email, password });
-
-    setLoading(false);
+      ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+      : await supabase.auth.signUp({ email: cleanEmail, password });
 
     if (result.error) {
+      setLoading(false);
       setFeedback(result.error.message);
       return;
     }
 
-    setFeedback(clientAuthMode === "signup" && mode === "client" ? "Cuenta creada. Revisa tu correo si Supabase pide confirmacion." : "Sesion iniciada.");
-    router.push(mode === "team" ? "/dashboard" : "/c");
-    router.refresh();
+    try {
+      if (mode === "client") {
+        await ensureCustomerProfile(cleanEmail);
+      }
+
+      const appUser = await getAppUser(cleanEmail);
+
+      if (!appUser?.active) {
+        await supabase.auth.signOut();
+        setFeedback("Este usuario no esta activo en LoyLoop.");
+        setLoading(false);
+        return;
+      }
+
+      if (mode === "team" && appUser.account_type !== "business") {
+        await supabase.auth.signOut();
+        setFeedback("Este correo no pertenece al equipo de un comercio.");
+        setLoading(false);
+        return;
+      }
+
+      if (mode === "client" && appUser.account_type !== "customer") {
+        await supabase.auth.signOut();
+        setFeedback("Este correo esta registrado como usuario de comercio.");
+        setLoading(false);
+        return;
+      }
+
+      const next = searchParams.get("next");
+      const fallbackPath = appUser.account_type === "business" ? "/dashboard" : "/c";
+      setFeedback(clientAuthMode === "signup" && mode === "client" ? "Cuenta creada." : "Sesion iniciada.");
+      router.push(next || fallbackPath);
+      router.refresh();
+    } catch (error) {
+      await supabase.auth.signOut();
+      setFeedback(error instanceof Error ? error.message : "No se pudo preparar el perfil.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function submitBusinessLead() {

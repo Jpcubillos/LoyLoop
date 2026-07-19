@@ -8,7 +8,7 @@
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1940ms
- ○ Compiling /dashboard/misiones ...
- ✓ Compiled /dashboard/misiones in 3.1s (719 modules)
- GET /dashboard/misiones 200 in 4695ms
+ ✓ Ready in 3.3s
+ ○ Compiling /login ...
+ ✓ Compiled /login in 1078ms (698 modules)
+ GET /login 200 in 2009ms

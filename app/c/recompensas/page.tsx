@@ -1,15 +1,45 @@
 import Link from "next/link";
 import { Coffee, Gift, Percent, Sparkles, Stamp, TicketPercent, Wallet } from "lucide-react";
 import { CustomerBottomNav } from "@/components/customer-bottom-nav";
+import { getCafeCentralCustomerState } from "@/lib/data/customer";
 
-const rewards = [
-  { business: "Cafe Central", title: "Cafe gratis", detail: "6/10 sellos", icon: Coffee, tone: "amber", href: "/c/cafe-central" },
-  { business: "Cafe Central", title: "15% descuento", detail: "Disponible hoy", icon: Percent, tone: "blue", href: "/c/cafe-central" },
-  { business: "Barberia Norte", title: "Corte con descuento", detail: "80 puntos", icon: TicketPercent, tone: "blue", href: "/c/comercios" },
-  { business: "Green Wash", title: "Lavado premium", detail: "2x puntos", icon: Sparkles, tone: "green", href: "/c/comercios" }
-];
+function formatCurrency(cents: number) {
+  return `$${Math.round(cents / 100).toLocaleString("es-CO")}`;
+}
 
-export default function RecompensasClientePage() {
+export default async function RecompensasClientePage() {
+  const customerState = await getCafeCentralCustomerState();
+  const rewards = [
+    {
+      business: "Cafe Central",
+      title: "Cafe gratis",
+      detail: `${customerState.currentStamps}/${customerState.requiredStamps} sellos`,
+      icon: Coffee,
+      tone: "amber",
+      href: "/c/cafe-central"
+    },
+    ...customerState.availableRewards.map((reward) => ({
+      business: "Cafe Central",
+      title: reward.name,
+      detail: reward.pointsRequired
+        ? `${reward.pointsRequired} puntos`
+        : reward.creditAmountCents
+          ? formatCurrency(reward.creditAmountCents)
+          : reward.description,
+      icon: reward.type === "discount" ? Percent : reward.type === "credit" ? Wallet : reward.type === "points" ? Sparkles : Gift,
+      tone: reward.type === "credit" ? "green" : reward.type === "product" ? "amber" : "blue",
+      href: "/c/cafe-central"
+    })),
+    ...customerState.availableCampaigns.map((campaign) => ({
+      business: "Cafe Central",
+      title: campaign.name,
+      detail: campaign.type === "points_boost" ? `+${campaign.rewardPoints} puntos` : `${campaign.discountPercent ?? 0}% descuento`,
+      icon: campaign.type === "points_boost" ? TicketPercent : Percent,
+      tone: "blue",
+      href: "/c/cafe-central"
+    }))
+  ];
+
   return (
     <main className="min-h-screen bg-slate-100">
       <div className="mx-auto flex min-h-screen max-w-md flex-col bg-slate-50 shadow-soft">
@@ -32,7 +62,7 @@ export default function RecompensasClientePage() {
           </div>
           <div className="space-y-3">
             {rewards.map((reward) => (
-              <Link key={`${reward.business}-${reward.title}`} href={reward.href} className="block rounded-lg border border-line bg-white p-4">
+              <Link key={`${reward.business}-${reward.title}-${reward.detail}`} href={reward.href} className="block rounded-lg border border-line bg-white p-4">
                 <div className="flex items-center gap-3">
                   <span className={`grid h-11 w-11 place-items-center rounded-lg ${
                     reward.tone === "green" ? "bg-emerald-50 text-emerald-700" : reward.tone === "amber" ? "bg-amber-50 text-amber-700" : "bg-brand-50 text-brand-600"

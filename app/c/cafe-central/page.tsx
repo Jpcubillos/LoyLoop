@@ -34,6 +34,13 @@ const missionIcons = {
   review: Star
 };
 
+const rewardIcons = {
+  discount: Percent,
+  points: Star,
+  credit: Wallet,
+  product: Gift
+};
+
 function formatCurrency(cents: number) {
   return `$${Math.round(cents / 100).toLocaleString("es-CO")}`;
 }
@@ -116,6 +123,31 @@ export default async function CafeCentralPage({
                 requiredStamps={customerState.requiredStamps}
                 message={stampMessage}
               />
+              {customerState.availableRewards.map((reward) => {
+                const Icon = rewardIcons[reward.type] ?? Gift;
+                const requirement = reward.pointsRequired
+                  ? `${reward.pointsRequired} puntos`
+                  : reward.creditAmountCents
+                    ? formatCurrency(reward.creditAmountCents)
+                    : "Disponible en caja";
+
+                return (
+                  <div key={reward.id} className="rounded-lg border border-line bg-white p-4">
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black">{reward.name}</p>
+                        <p className="text-xs text-muted">{reward.description}</p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-black text-muted">
+                        {requirement}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
               {customerState.availableCampaigns.map((campaign) => {
                 const Icon = campaign.type === "points_boost" ? TicketPercent : Percent;
 

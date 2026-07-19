@@ -16,6 +16,14 @@ export type CafeCentralCustomerState = {
     discountPercent: number | null;
     rewardPoints: number;
   }>;
+  availableRewards: Array<{
+    id: string;
+    name: string;
+    type: "discount" | "points" | "credit" | "product";
+    description: string;
+    pointsRequired: number | null;
+    creditAmountCents: number | null;
+  }>;
   availableMissions: Array<{
     id: string;
     name: string;
@@ -58,6 +66,24 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
         description: "Hoy de 3 p.m. a 5 p.m.",
         discountPercent: null,
         rewardPoints: 20
+      }
+    ],
+    availableRewards: [
+      {
+        id: "demo-reward-stamps",
+        name: "Cafe gratis con 10 sellos",
+        type: "product",
+        description: "Completa 10 compras registradas y reclama un cafe gratis.",
+        pointsRequired: null,
+        creditAmountCents: null
+      },
+      {
+        id: "demo-reward-discount",
+        name: "15% de descuento",
+        type: "discount",
+        description: "Disponible en tu proxima visita.",
+        pointsRequired: 200,
+        creditAmountCents: null
       }
     ],
     availableMissions: [
@@ -199,6 +225,24 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
           };
         });
 
+  const { data: rewards, error: rewardsError } = await db
+    .from("rewards")
+    .select("id, name, type, description, points_required, credit_amount_cents")
+    .eq("business_id", business.id)
+    .eq("active", true)
+    .order("created_at", { ascending: false });
+
+  const availableRewards = rewardsError
+    ? fallback.availableRewards
+    : (rewards ?? []).map((reward: any) => ({
+        id: reward.id,
+        name: reward.name,
+        type: reward.type,
+        description: reward.description ?? "Beneficio disponible en este comercio.",
+        pointsRequired: reward.points_required,
+        creditAmountCents: reward.credit_amount_cents
+      }));
+
   return {
     points: membership?.points_balance ?? fallback.points,
     creditCents: membership?.credit_balance_cents ?? fallback.creditCents,
@@ -206,6 +250,7 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     currentStamps: stampCard?.current_stamps ?? fallback.currentStamps,
     requiredStamps: stampCard?.required_stamps ?? fallback.requiredStamps,
     availableCampaigns,
+    availableRewards,
     availableMissions,
     history: events?.length
       ? events.map((event: any) => [

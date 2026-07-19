@@ -7,6 +7,7 @@ import {
   Bell,
   Gift,
   Home,
+  LogOut,
   Megaphone,
   QrCode,
   ScanLine,
@@ -16,6 +17,7 @@ import {
   UserRound,
   Users
 } from "lucide-react";
+import { supabase } from "@/lib/supabase/client";
 
 const navItems = [
   { label: "Inicio", href: "/dashboard", icon: Home },
@@ -44,6 +46,11 @@ function Logo() {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 text-ink">
@@ -94,6 +101,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               </button>
               <button className="grid h-10 w-10 place-items-center rounded-full bg-brand-50 text-sm font-black text-brand-700">
                 CC
+              </button>
+              <button
+                className="grid h-10 w-10 place-items-center rounded-lg border border-line bg-white text-slate-600 hover:text-ink"
+                onClick={signOut}
+                title="Cerrar sesion"
+              >
+                <LogOut className="h-4 w-4" />
               </button>
             </div>
           </header>

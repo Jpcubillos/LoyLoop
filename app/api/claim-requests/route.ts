@@ -1,6 +1,16 @@
 import { NextResponse } from "next/server";
 import { createClaimRequest, type ClaimAction } from "@/lib/claims";
 
+function getErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : JSON.stringify(error);
+
+  if (raw.includes("ENOTFOUND") || raw.includes("fetch failed")) {
+    return "No se pudo conectar con Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL en .env.local.";
+  }
+
+  return raw || "Could not create claim request.";
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -22,7 +32,6 @@ export async function POST(request: Request) {
       expiresAt: claim.expires_at
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not create claim request.";
-    return NextResponse.json({ ok: false, message }, { status: 500 });
+    return NextResponse.json({ ok: false, message: getErrorMessage(error) }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
-import { Bell, CreditCard, LogOut, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { UserRound } from "lucide-react";
 import { CustomerBottomNav } from "@/components/customer-bottom-nav";
+import { CustomerProfileActions } from "@/components/customer-profile-actions";
 
 export default function PerfilClientePage() {
   return (
@@ -32,20 +33,7 @@ export default function PerfilClientePage() {
               ))}
             </div>
           </div>
-          <div className="space-y-3">
-            {[
-              ["Conectar MiniPay", Wallet],
-              ["Metodos de pago", CreditCard],
-              ["Notificaciones", Bell],
-              ["Privacidad y seguridad", ShieldCheck],
-              ["Cerrar sesion", LogOut]
-            ].map(([label, Icon]) => (
-              <button key={label as string} className="flex w-full items-center gap-3 rounded-lg border border-line bg-white p-4 text-left text-sm font-black">
-                <Icon className="h-5 w-5 text-brand-500" />
-                {label as string}
-              </button>
-            ))}
-          </div>
+          <CustomerProfileActions />
         </section>
         <CustomerBottomNav active="Perfil" />
       </div>
