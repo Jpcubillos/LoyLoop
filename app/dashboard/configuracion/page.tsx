@@ -1,6 +1,7 @@
 import { CreditCard, Save, ShieldCheck, Store, Wallet } from "lucide-react";
-import { createBusinessUser, updateAppUserRole } from "@/lib/actions/app-users";
+import { createBusinessUser, updateAppUserRole, updateBusinessSegmentationRules } from "@/lib/actions/app-users";
 import { getAppUsers } from "@/lib/data/app-users";
+import { getBusinessSettings } from "@/lib/data/dashboard";
 
 const businessRoles = [
   { value: "owner", label: "Duenio" },
@@ -8,15 +9,9 @@ const businessRoles = [
   { value: "cashier", label: "Cajero" }
 ];
 
-const customerSegments = [
-  { value: "inactive", label: "Inactivo" },
-  { value: "at_risk", label: "En riesgo" },
-  { value: "active", label: "Activo" },
-  { value: "vip", label: "VIP" }
-];
-
 export default async function ConfiguracionPage() {
   const users = await getAppUsers();
+  const businessSettings = await getBusinessSettings();
 
   return (
     <>
@@ -79,7 +74,7 @@ export default async function ConfiguracionPage() {
             </p>
             <div className="grid gap-3">
               {users.map((user) => (
-                <form key={user.id} action={updateAppUserRole} className="grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1.5fr_1fr_1fr_1fr_auto] lg:items-end">
+                <form key={user.id} action={updateAppUserRole} className="grid gap-3 rounded-lg border border-line p-4 lg:grid-cols-[1.5fr_1fr_1fr_auto] lg:items-end">
                   <input type="hidden" name="id" value={user.id} />
                   <div>
                     <p className="font-black">{user.fullName}</p>
@@ -100,14 +95,6 @@ export default async function ConfiguracionPage() {
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1 text-xs font-bold text-muted">
-                    Segmento
-                    <select name="customer_segment" defaultValue={user.customerSegment ?? "active"} className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal text-ink">
-                      {customerSegments.map((segment) => (
-                        <option key={segment.value} value={segment.value}>{segment.label}</option>
-                      ))}
-                    </select>
-                  </label>
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-2 text-sm font-bold">
                       <input name="active" type="checkbox" defaultChecked={user.active} />
@@ -122,20 +109,34 @@ export default async function ConfiguracionPage() {
         </div>
 
         <div className="grid gap-6">
-          <div className="rounded-lg border border-line bg-white p-5">
+          <form action={updateBusinessSegmentationRules} className="rounded-lg border border-line bg-white p-5">
             <div className="mb-4 flex items-center gap-3">
               <CreditCard className="h-5 w-5 text-brand-500" />
-              <h2 className="font-black">Reglas de puntos</h2>
+              <h2 className="font-black">Reglas de clientes</h2>
             </div>
             <label className="grid gap-1 text-sm font-bold">
-              Puntos por cada $10.000
-              <input className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue="10" />
+              Compras para ser VIP
+              <input name="vip_purchase_threshold" type="number" min="1" className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue={businessSettings.vipPurchaseThreshold} />
             </label>
             <label className="mt-4 grid gap-1 text-sm font-bold">
-              Valor minimo para redimir
-              <input className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue="100 puntos" />
+              En riesgo despues de
+              <div className="flex items-center gap-2">
+                <input name="at_risk_days" type="number" min="1" className="w-full rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue={businessSettings.atRiskDays} />
+                <span className="text-sm font-bold text-muted">dias</span>
+              </div>
             </label>
-          </div>
+            <label className="mt-4 grid gap-1 text-sm font-bold">
+              Inactivo despues de
+              <div className="flex items-center gap-2">
+                <input name="inactive_days" type="number" min="2" className="w-full rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue={businessSettings.inactiveDays} />
+                <span className="text-sm font-bold text-muted">dias</span>
+              </div>
+            </label>
+            <p className="mt-3 text-xs leading-5 text-muted">
+              El segmento del cliente se calcula por compras y ultima visita. Las campanas y misiones usan estas reglas para decidir a quien aparecen.
+            </p>
+            <button className="btn-primary mt-4 w-full text-sm">Guardar reglas</button>
+          </form>
 
           <div className="rounded-lg border border-line bg-white p-5">
             <div className="mb-4 flex items-center gap-3">

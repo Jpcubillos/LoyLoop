@@ -10,9 +10,16 @@ create table if not exists public.businesses (
   city text,
   logo_url text,
   qr_code_url text,
+  vip_purchase_threshold integer not null default 30 check (vip_purchase_threshold > 0),
+  at_risk_days integer not null default 90 check (at_risk_days > 0),
+  inactive_days integer not null default 180 check (inactive_days > 0),
   owner_user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table public.businesses add column if not exists vip_purchase_threshold integer not null default 30;
+alter table public.businesses add column if not exists at_risk_days integer not null default 90;
+alter table public.businesses add column if not exists inactive_days integer not null default 180;
 
 create table if not exists public.customer_profiles (
   id uuid primary key default gen_random_uuid(),

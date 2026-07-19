@@ -17,14 +17,14 @@ La pantalla `/login` tiene tres modos:
 | Modo | Uso |
 | --- | --- |
 | Cliente | Clientes nuevos o existentes crean cuenta/inician sesion |
-| Equipo | Duenios, administradores y cajeros ya creados por el comercio |
-| Comercio | Un nuevo duenio solicita activar su negocio |
+| Equipo | Dueños, administradores y cajeros ya creados por el comercio |
+| Comercio | Un nuevo Dueños solicita activar su negocio |
 
 Las solicitudes de nuevos comercios se guardan en `public.business_leads`.
 
 ## Equipo del comercio
 
-Los trabajadores y administradores no se crean desde el login publico. El duenio los crea desde:
+Los trabajadores y administradores no se crean desde el login publico. El Dueños los crea desde:
 
 ```txt
 /dashboard/configuracion

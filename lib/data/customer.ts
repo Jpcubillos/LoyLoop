@@ -43,6 +43,34 @@ function formatEventValue(points: number, creditCents: number) {
   return "";
 }
 
+function getDaysSince(dateValue?: string | null) {
+  if (!dateValue) return Number.POSITIVE_INFINITY;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return Number.POSITIVE_INFINITY;
+  return Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function deriveCustomerSegment({
+  purchaseCount,
+  lastVisitAt,
+  vipPurchaseThreshold,
+  atRiskDays,
+  inactiveDays
+}: {
+  purchaseCount: number;
+  lastVisitAt?: string | null;
+  vipPurchaseThreshold: number;
+  atRiskDays: number;
+  inactiveDays: number;
+}) {
+  const daysSinceLastVisit = getDaysSince(lastVisitAt);
+
+  if (daysSinceLastVisit >= inactiveDays) return "inactive";
+  if (daysSinceLastVisit >= atRiskDays) return "at_risk";
+  if (purchaseCount >= vipPurchaseThreshold) return "vip";
+  return "active";
+}
+
 export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomerState> {
   const fallback: CafeCentralCustomerState = {
     points: 120,
@@ -115,7 +143,7 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
 
   const { data: business, error: businessError } = await db
     .from("businesses")
-    .select("id")
+    .select("id, vip_purchase_threshold, at_risk_days, inactive_days")
     .eq("slug", "cafe-central")
     .maybeSingle();
 
@@ -152,7 +180,23 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     .order("created_at", { ascending: false })
     .limit(3);
 
-  const customerSegment = membership?.tier?.toLowerCase().includes("vip") ? "vip" : "active";
+  const { data: behaviorEvents } = await db
+    .from("loyalty_events")
+    .select("event_type, created_at")
+    .eq("business_id", business.id)
+    .eq("customer_id", customer.id)
+    .in("event_type", ["purchase", "stamp", "minipay_payment"])
+    .order("created_at", { ascending: false });
+
+  const purchaseCount = behaviorEvents?.length ?? 0;
+  const lastVisitAt = behaviorEvents?.[0]?.created_at ?? null;
+  const customerSegment = deriveCustomerSegment({
+    purchaseCount,
+    lastVisitAt,
+    vipPurchaseThreshold: business.vip_purchase_threshold ?? 30,
+    atRiskDays: business.at_risk_days ?? 90,
+    inactiveDays: business.inactive_days ?? 180
+  });
   const now = Date.now();
 
   const { data: campaigns, error: campaignsError } = await db

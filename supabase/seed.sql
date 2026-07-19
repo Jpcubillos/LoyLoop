@@ -1,14 +1,17 @@
-insert into public.businesses (slug, name, category, description, address, city)
+insert into public.businesses (slug, name, category, description, address, city, vip_purchase_threshold, at_risk_days, inactive_days)
 values
-  ('cafe-central', 'Cafe Central', 'Cafeteria', 'Cafe de barrio con recompensas, sellos y pagos MiniPay.', 'Cra. 7 #45-12', 'Bogota'),
-  ('barberia-norte', 'Barberia Norte', 'Barberia', 'Cortes, barba y membresias para clientes frecuentes.', 'Calle 80 #12-30', 'Bogota'),
-  ('green-wash', 'Green Wash', 'Lavadero', 'Lavado de carros y motos con puntos dobles en horas valle.', 'Av. 19 #104-22', 'Bogota')
+  ('cafe-central', 'Cafe Central', 'Cafeteria', 'Cafe de barrio con recompensas, sellos y pagos MiniPay.', 'Cra. 7 #45-12', 'Bogota', 30, 90, 180),
+  ('barberia-norte', 'Barberia Norte', 'Barberia', 'Cortes, barba y membresias para clientes frecuentes.', 'Calle 80 #12-30', 'Bogota', 20, 75, 150),
+  ('green-wash', 'Green Wash', 'Lavadero', 'Lavado de carros y motos con puntos dobles en horas valle.', 'Av. 19 #104-22', 'Bogota', 15, 60, 120)
 on conflict (slug) do update set
   name = excluded.name,
   category = excluded.category,
   description = excluded.description,
   address = excluded.address,
-  city = excluded.city;
+  city = excluded.city,
+  vip_purchase_threshold = excluded.vip_purchase_threshold,
+  at_risk_days = excluded.at_risk_days,
+  inactive_days = excluded.inactive_days;
 
 insert into public.customer_profiles (full_name, phone, email, wallet_address)
 values
@@ -42,21 +45,21 @@ vip_customer as (
   select id from public.customer_profiles where email = 'cliente.vip@loyloop.app'
 )
 insert into public.app_users (email, full_name, account_type, business_id, customer_id, business_role, customer_segment, active)
-select 'owner@loyloop.app', 'Duenio Cafe Central', 'business', cafe.id, null::uuid, 'owner', null::text, true from cafe
+select 'owner@loyloop.app', 'Dueños Cafe Central', 'business', cafe.id, null::uuid, 'owner', null::text, true from cafe
 union all
 select 'manager@loyloop.app', 'Administrador Cafe Central', 'business', cafe.id, null::uuid, 'manager', null::text, true from cafe
 union all
 select 'cajero@loyloop.app', 'Cajero Cafe Central', 'business', cafe.id, null::uuid, 'cashier', null::text, true from cafe
 union all
-select 'juan@loyloop.app', 'Juan Perez', 'customer', cafe.id, juan.id, null::text, 'active', true from cafe, juan
+select 'juan@loyloop.app', 'Juan Perez', 'customer', cafe.id, juan.id, null::text, null::text, true from cafe, juan
 union all
-select 'cliente.inactivo@loyloop.app', 'Cliente Inactivo', 'customer', cafe.id, inactive_customer.id, null::text, 'inactive', true from cafe, inactive_customer
+select 'cliente.inactivo@loyloop.app', 'Cliente Inactivo', 'customer', cafe.id, inactive_customer.id, null::text, null::text, true from cafe, inactive_customer
 union all
-select 'cliente.riesgo@loyloop.app', 'Cliente En Riesgo', 'customer', cafe.id, risk_customer.id, null::text, 'at_risk', true from cafe, risk_customer
+select 'cliente.riesgo@loyloop.app', 'Cliente En Riesgo', 'customer', cafe.id, risk_customer.id, null::text, null::text, true from cafe, risk_customer
 union all
-select 'cliente.activo@loyloop.app', 'Cliente Activo', 'customer', cafe.id, active_customer.id, null::text, 'active', true from cafe, active_customer
+select 'cliente.activo@loyloop.app', 'Cliente Activo', 'customer', cafe.id, active_customer.id, null::text, null::text, true from cafe, active_customer
 union all
-select 'cliente.vip@loyloop.app', 'Cliente VIP', 'customer', cafe.id, vip_customer.id, null::text, 'vip', true from cafe, vip_customer
+select 'cliente.vip@loyloop.app', 'Cliente VIP', 'customer', cafe.id, vip_customer.id, null::text, null::text, true from cafe, vip_customer
 on conflict (email) do update set
   full_name = excluded.full_name,
   account_type = excluded.account_type,

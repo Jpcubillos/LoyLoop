@@ -54,6 +54,12 @@ export type DashboardCampaign = {
   redemptions: string;
 };
 
+export type BusinessSettings = {
+  vipPurchaseThreshold: number;
+  atRiskDays: number;
+  inactiveDays: number;
+};
+
 export async function getCafeCentral() {
   const { data, error } = await db
     .from("businesses")
@@ -63,6 +69,16 @@ export async function getCafeCentral() {
 
   if (error || !data) return null;
   return data;
+}
+
+export async function getBusinessSettings(): Promise<BusinessSettings> {
+  const business = await getCafeCentral();
+
+  return {
+    vipPurchaseThreshold: business?.vip_purchase_threshold ?? 30,
+    atRiskDays: business?.at_risk_days ?? 90,
+    inactiveDays: business?.inactive_days ?? 180
+  };
 }
 
 function getFallbackCampaigns(): DashboardCampaign[] {

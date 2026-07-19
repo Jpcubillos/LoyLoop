@@ -8,7 +8,9 @@
    - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 3.3s
+ ✓ Ready in 3.8s
  ○ Compiling /login ...
- ✓ Compiled /login in 1078ms (698 modules)
- GET /login 200 in 2009ms
+ ✓ Compiled /login in 1774ms (698 modules)
+ GET /login 200 in 2624ms
+ GET /login?next=%2Fdashboard 200 in 546ms
+ ✓ Compiled in 2.7s (712 modules)

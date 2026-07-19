@@ -9,20 +9,13 @@ const db = supabase as any;
 
 type AuthMode = "client" | "team" | "business";
 
-const clientDemoUsers = [
-  { email: "cliente.inactivo@loyloop.app", label: "Inactivo", detail: "Campanas de reactivacion" },
-  { email: "cliente.riesgo@loyloop.app", label: "En riesgo", detail: "Baja frecuencia" },
-  { email: "cliente.activo@loyloop.app", label: "Activo", detail: "Cliente frecuente" },
-  { email: "cliente.vip@loyloop.app", label: "VIP", detail: "Alto valor" }
-];
-
 export function AuthForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<AuthMode>("client");
   const [clientAuthMode, setClientAuthMode] = useState<"login" | "signup">("signup");
-  const [email, setEmail] = useState("cliente.activo@loyloop.app");
-  const [password, setPassword] = useState("LoyLoopDemo2026!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
@@ -64,7 +57,7 @@ export function AuthForm() {
       business_id: null,
       customer_id: customer.id,
       business_role: null,
-      customer_segment: "active",
+      customer_segment: null,
       active: true
     }, { onConflict: "email" });
 
@@ -203,8 +196,8 @@ export function AuthForm() {
                 setClientAuthMode("login");
               }
               if (item.value === "client") {
-                setEmail("cliente.activo@loyloop.app");
-                setPassword("LoyLoopDemo2026!");
+                setEmail("");
+                setPassword("");
               }
             }}
           >
@@ -223,26 +216,6 @@ export function AuthForm() {
             <button type="button" className={`rounded-md py-2 text-sm font-black ${clientAuthMode === "login" ? "bg-white text-brand-700 shadow-sm" : "text-muted"}`} onClick={() => setClientAuthMode("login")}>
               Entrar
             </button>
-          </div>
-          <div className="grid gap-2">
-            <p className="text-xs font-bold uppercase text-muted">Clientes demo</p>
-            <div className="grid grid-cols-2 gap-2">
-              {clientDemoUsers.map((user) => (
-                <button
-                  key={user.email}
-                  type="button"
-                  className={`rounded-lg border px-3 py-2 text-left text-xs ${email === user.email ? "border-brand-500 bg-brand-50 text-brand-700" : "border-line bg-slate-50 text-muted"}`}
-                  onClick={() => {
-                    setEmail(user.email);
-                    setPassword("LoyLoopDemo2026!");
-                    setClientAuthMode("login");
-                  }}
-                >
-                  <span className="block font-black">{user.label}</span>
-                  <span className="mt-1 block leading-4">{user.detail}</span>
-                </button>
-              ))}
-            </div>
           </div>
           <AuthFields email={email} password={password} setEmail={setEmail} setPassword={setPassword} />
           {feedback && <p className="rounded-lg bg-slate-50 p-3 text-sm text-muted">{feedback}</p>}

@@ -42,7 +42,6 @@ export async function updateAppUserRole(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const accountType = String(formData.get("account_type") ?? "customer");
   const businessRole = String(formData.get("business_role") ?? "");
-  const customerSegment = String(formData.get("customer_segment") ?? "");
   const active = formData.get("active") === "on";
 
   if (!id) return;
@@ -52,10 +51,33 @@ export async function updateAppUserRole(formData: FormData) {
     .update({
       account_type: accountType,
       business_role: accountType === "business" ? businessRole : null,
-      customer_segment: accountType === "customer" ? customerSegment : null,
+      customer_segment: null,
       active
     })
     .eq("id", id);
 
   revalidatePath("/dashboard/configuracion");
+}
+
+export async function updateBusinessSegmentationRules(formData: FormData) {
+  const business = await getBusiness();
+  const vipPurchaseThreshold = Number(formData.get("vip_purchase_threshold") ?? 30);
+  const atRiskDays = Number(formData.get("at_risk_days") ?? 90);
+  const inactiveDays = Number(formData.get("inactive_days") ?? 180);
+
+  const safeVipThreshold = Math.max(1, Math.floor(vipPurchaseThreshold || 30));
+  const safeAtRiskDays = Math.max(1, Math.floor(atRiskDays || 90));
+  const safeInactiveDays = Math.max(safeAtRiskDays + 1, Math.floor(inactiveDays || 180));
+
+  await db
+    .from("businesses")
+    .update({
+      vip_purchase_threshold: safeVipThreshold,
+      at_risk_days: safeAtRiskDays,
+      inactive_days: safeInactiveDays
+    })
+    .eq("id", business.id);
+
+  revalidatePath("/dashboard/configuracion");
+  revalidatePath("/c/cafe-central");
 }

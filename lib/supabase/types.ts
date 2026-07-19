@@ -14,6 +14,9 @@ export type Database = {
           city: string | null;
           logo_url: string | null;
           qr_code_url: string | null;
+          vip_purchase_threshold: number;
+          at_risk_days: number;
+          inactive_days: number;
           owner_user_id: string | null;
           created_at: string;
         };
@@ -27,6 +30,9 @@ export type Database = {
           city?: string | null;
           logo_url?: string | null;
           qr_code_url?: string | null;
+          vip_purchase_threshold?: number;
+          at_risk_days?: number;
+          inactive_days?: number;
           owner_user_id?: string | null;
           created_at?: string;
         };

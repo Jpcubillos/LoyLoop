@@ -16,7 +16,7 @@ const fallbackUsers: AppUser[] = [
   {
     id: "owner-demo",
     email: "owner@loyloop.app",
-    fullName: "Duenio Cafe Central",
+    fullName: "Dueños Cafe Central",
     accountType: "business",
     businessRole: "owner",
     customerSegment: null,
