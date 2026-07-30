@@ -75,9 +75,12 @@ create table if not exists public.rewards (
   description text,
   points_required integer check (points_required is null or points_required >= 0),
   credit_amount_cents integer check (credit_amount_cents is null or credit_amount_cents >= 0),
+  audience_segment text not null default 'active' check (audience_segment in ('inactive', 'at_risk', 'active', 'vip')),
   active boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+alter table public.rewards add column if not exists audience_segment text not null default 'active';
 
 create table if not exists public.missions (
   id uuid primary key default gen_random_uuid(),
@@ -320,6 +323,49 @@ create policy "Demo can create rewards"
 on public.rewards for insert
 to anon, authenticated
 with check (true);
+
+drop policy if exists "Business team can update rewards" on public.rewards;
+create policy "Business team can update rewards"
+on public.rewards for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_users
+    where app_users.email = auth.jwt() ->> 'email'
+      and app_users.account_type = 'business'
+      and app_users.active = true
+      and app_users.business_id = rewards.business_id
+      and app_users.business_role in ('owner', 'manager')
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.app_users
+    where app_users.email = auth.jwt() ->> 'email'
+      and app_users.account_type = 'business'
+      and app_users.active = true
+      and app_users.business_id = rewards.business_id
+      and app_users.business_role in ('owner', 'manager')
+  )
+);
+
+drop policy if exists "Business team can delete rewards" on public.rewards;
+create policy "Business team can delete rewards"
+on public.rewards for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_users
+    where app_users.email = auth.jwt() ->> 'email'
+      and app_users.account_type = 'business'
+      and app_users.active = true
+      and app_users.business_id = rewards.business_id
+      and app_users.business_role in ('owner', 'manager')
+  )
+);
 
 drop policy if exists "Demo can create missions" on public.missions;
 create policy "Demo can create missions"

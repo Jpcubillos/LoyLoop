@@ -98,12 +98,12 @@ where business_id in (select id from cafe)
   and name in ('Cafe gratis con 10 sellos', '15% de descuento', '$5.000 de credito');
 
 with cafe as (select id from public.businesses where slug = 'cafe-central')
-insert into public.rewards (business_id, name, type, description, points_required, credit_amount_cents, active)
-select id, 'Cafe gratis con 10 sellos', 'product', 'Completa 10 compras registradas y reclama un cafe gratis.', null::integer, null::integer, true from cafe
+insert into public.rewards (business_id, name, type, description, points_required, credit_amount_cents, audience_segment, active)
+select id, 'Cafe gratis con 10 sellos', 'product', 'Completa 10 compras registradas y reclama un cafe gratis.', null::integer, null::integer, 'active', true from cafe
 union all
-select id, '15% de descuento', 'discount', 'Disponible en tu proxima visita.', 200, null::integer, true from cafe
+select id, '15% de descuento', 'discount', 'Disponible en tu proxima visita.', 200, null::integer, 'active', true from cafe
 union all
-select id, '$5.000 de credito', 'credit', 'Credito de bienvenida para nuevos clientes.', null::integer, 500000, true from cafe;
+select id, '$5.000 de credito', 'credit', 'Credito de bienvenida para nuevos clientes.', null::integer, 500000, 'inactive', true from cafe;
 
 with cafe as (select id from public.businesses where slug = 'cafe-central')
 delete from public.missions

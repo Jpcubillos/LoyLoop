@@ -16,3 +16,50 @@
  ✓ Compiled in 2.7s (712 modules)
  ✓ Compiled in 621ms (712 modules)
  GET /login?next=%2Fdashboard 200 in 447ms
+ ✓ Compiled in 284ms (290 modules)
+ ✓ Compiled in 200ms (290 modules)
+ GET /login?next=%2Fdashboard 200 in 191ms
+ GET /login?next=%2Fdashboard 200 in 38ms
+ ✓ Compiled in 423ms (712 modules)
+ GET /login?next=%2Fdashboard 200 in 148ms
+ ○ Compiling /c/cafe-central ...
+ ✓ Compiled /c/cafe-central in 1672ms (819 modules)
+ ✓ Compiled in 1232ms (307 modules)
+ GET /login?next=%2Fdashboard 200 in 1231ms
+ GET /login?next=%2Fdashboard 200 in 87ms
+ GET /login?next=%2Fc%2Fcafe-central 200 in 42ms
+ GET /login?next=%2Fc%2Fcafe-central 200 in 73ms
+ GET /c/cafe-central 200 in 5631ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1245ms (878 modules)
+ GET / 200 in 1461ms
+ GET /login?next=%2Fdashboard 200 in 243ms
+ GET / 200 in 88ms
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 2.1s (825 modules)
+ GET /dashboard 200 in 2766ms
+ GET /dashboard 200 in 204ms
+ GET /login?next=%2Fdashboard 200 in 109ms
+ GET /login?next=%2Fdashboard 200 in 110ms
+ GET /login?next=%2Fdashboard 200 in 121ms
+ ○ Compiling /c/cafe-central ...
+ ✓ Compiled /c/cafe-central in 764ms (564 modules)
+ GET /login?next=%2Fc%2Fcafe-central 200 in 152ms
+ GET /login?next=%2Fc%2Fcafe-central 200 in 99ms
+ GET /c/cafe-central 200 in 5982ms
+ GET /dashboard 200 in 284ms
+ GET /dashboard 200 in 193ms
+ ○ Compiling /c ...
+ ✓ Compiled /c in 2.2s (888 modules)
+ GET /c 200 in 714ms
+ GET /c 200 in 3609ms
+ ○ Compiling /c/cafe-central ...
+ ✓ Compiled /c/cafe-central in 638ms (573 modules)
+ ○ Compiling /c/comercios ...
+ ✓ Compiled /c/comercios in 1707ms (919 modules)
+ GET /c/comercios 200 in 3188ms
+ GET /c/comercios 200 in 1282ms
+ GET /c/cafe-central 200 in 4523ms
+ GET /c/cafe-central 200 in 2826ms
+ GET /c/cafe-central 200 in 2325ms
+ GET /c/cafe-central 200 in 2776ms

@@ -90,7 +90,9 @@ export async function createReward(formData: FormData) {
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "product");
     const points = Number(formData.get("points_required") ?? 0);
+    const creditAmount = Number(formData.get("credit_amount_cents") ?? 0);
     const description = String(formData.get("description") ?? "").trim();
+    const audienceSegment = String(formData.get("audience_segment") ?? "active");
 
     if (!name) return;
 
@@ -100,14 +102,66 @@ export async function createReward(formData: FormData) {
       type,
       description,
       points_required: points > 0 ? points : null,
+      credit_amount_cents: type === "credit" && creditAmount > 0 ? creditAmount : null,
+      audience_segment: audienceSegment,
       active: true
     });
 
     if (error) throw error;
     revalidatePath("/dashboard/recompensas");
     revalidatePath("/c/cafe-central");
+    revalidatePath("/c/recompensas");
   } catch (error) {
     logDemoBackendWarning("createReward", error);
+  }
+}
+
+export async function updateReward(formData: FormData) {
+  try {
+    const id = String(formData.get("id") ?? "");
+    const name = String(formData.get("name") ?? "").trim();
+    const type = String(formData.get("type") ?? "product");
+    const points = Number(formData.get("points_required") ?? 0);
+    const creditAmount = Number(formData.get("credit_amount_cents") ?? 0);
+    const description = String(formData.get("description") ?? "").trim();
+    const audienceSegment = String(formData.get("audience_segment") ?? "active");
+
+    if (!id || !name) return;
+
+    const { error } = await db
+      .from("rewards")
+      .update({
+        name,
+        type,
+        description,
+        points_required: points > 0 ? points : null,
+        credit_amount_cents: type === "credit" && creditAmount > 0 ? creditAmount : null,
+        audience_segment: audienceSegment
+      })
+      .eq("id", id);
+
+    if (error) throw error;
+    revalidatePath("/dashboard/recompensas");
+    revalidatePath("/c/cafe-central");
+    revalidatePath("/c/recompensas");
+  } catch (error) {
+    logDemoBackendWarning("updateReward", error);
+  }
+}
+
+export async function deleteReward(formData: FormData) {
+  try {
+    const id = String(formData.get("id") ?? "");
+    if (!id) return;
+
+    const { error } = await db.from("rewards").delete().eq("id", id);
+
+    if (error) throw error;
+    revalidatePath("/dashboard/recompensas");
+    revalidatePath("/c/cafe-central");
+    revalidatePath("/c/recompensas");
+  } catch (error) {
+    logDemoBackendWarning("deleteReward", error);
   }
 }
 

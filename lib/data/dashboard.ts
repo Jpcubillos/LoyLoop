@@ -8,9 +8,16 @@ import {
 const db = supabase as any;
 
 export type DashboardReward = {
+  id: string;
   name: string;
   type: string;
+  typeValue: string;
+  description: string;
   requirement: string;
+  audience: string;
+  audienceSegment: string;
+  pointsRequired: number;
+  creditAmountCents: number;
   redeemed: number;
   active: boolean;
 };
@@ -103,6 +110,29 @@ function getFallbackCampaigns(): DashboardCampaign[] {
   }));
 }
 
+function getFallbackRewards(): DashboardReward[] {
+  return fallbackRewards.map((reward) => ({
+    id: reward.name,
+    name: reward.name,
+    type: reward.type,
+    typeValue: reward.type.toLowerCase().includes("descuento")
+      ? "discount"
+      : reward.type.toLowerCase().includes("credito")
+        ? "credit"
+        : reward.type.toLowerCase().includes("puntos")
+          ? "points"
+          : "product",
+    description: reward.requirement,
+    requirement: reward.requirement,
+    audience: "Activo",
+    audienceSegment: "active",
+    pointsRequired: reward.requirement.includes("200") ? 200 : 0,
+    creditAmountCents: reward.name.includes("$5.000") ? 500000 : 0,
+    redeemed: reward.redeemed,
+    active: reward.active
+  }));
+}
+
 function getSegmentLabel(segment?: string) {
   const labels: Record<string, string> = {
     inactive: "Inactivo",
@@ -134,7 +164,7 @@ function toDateTimeInput(value?: string | null) {
 
 export async function getDashboardRewards(): Promise<DashboardReward[]> {
   const business = await getCafeCentral();
-  if (!business) return fallbackRewards;
+  if (!business) return getFallbackRewards();
 
   const { data, error } = await db
     .from("rewards")
@@ -142,12 +172,19 @@ export async function getDashboardRewards(): Promise<DashboardReward[]> {
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
-  if (error || !data.length) return fallbackRewards;
+  if (error || !data.length) return getFallbackRewards();
 
   return data.map((reward: any) => ({
+    id: reward.id,
     name: reward.name,
-    type: reward.type,
+    type: reward.type === "product" ? "Producto gratis" : reward.type === "discount" ? "Descuento" : reward.type === "credit" ? "Credito" : "Puntos",
+    typeValue: reward.type,
+    description: reward.description ?? "Beneficio disponible en este comercio.",
     requirement: reward.points_required ? `${reward.points_required} puntos` : reward.description ?? "Sin condicion",
+    audience: getSegmentLabel(reward.audience_segment),
+    audienceSegment: reward.audience_segment ?? "active",
+    pointsRequired: reward.points_required ?? 0,
+    creditAmountCents: reward.credit_amount_cents ?? 0,
     redeemed: 0,
     active: reward.active
   }));

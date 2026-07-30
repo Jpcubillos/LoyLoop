@@ -87,6 +87,7 @@ export type Database = {
           description: string | null;
           points_required: number | null;
           credit_amount_cents: number | null;
+          audience_segment: string;
           active: boolean;
           created_at: string;
         };
@@ -98,6 +99,7 @@ export type Database = {
           description?: string | null;
           points_required?: number | null;
           credit_amount_cents?: number | null;
+          audience_segment?: string;
           active?: boolean;
           created_at?: string;
         };

@@ -271,21 +271,23 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
 
   const { data: rewards, error: rewardsError } = await db
     .from("rewards")
-    .select("id, name, type, description, points_required, credit_amount_cents")
+    .select("id, name, type, description, points_required, credit_amount_cents, audience_segment")
     .eq("business_id", business.id)
     .eq("active", true)
     .order("created_at", { ascending: false });
 
   const availableRewards = rewardsError
     ? fallback.availableRewards
-    : (rewards ?? []).map((reward: any) => ({
-        id: reward.id,
-        name: reward.name,
-        type: reward.type,
-        description: reward.description ?? "Beneficio disponible en este comercio.",
-        pointsRequired: reward.points_required,
-        creditAmountCents: reward.credit_amount_cents
-      }));
+    : (rewards ?? [])
+        .filter((reward: any) => (reward.audience_segment ?? "active") === customerSegment)
+        .map((reward: any) => ({
+          id: reward.id,
+          name: reward.name,
+          type: reward.type,
+          description: reward.description ?? "Beneficio disponible en este comercio.",
+          pointsRequired: reward.points_required,
+          creditAmountCents: reward.credit_amount_cents
+        }));
 
   return {
     points: membership?.points_balance ?? fallback.points,
