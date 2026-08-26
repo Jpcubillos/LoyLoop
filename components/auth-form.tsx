@@ -75,6 +75,40 @@ export function AuthForm() {
     return data;
   }
 
+  async function ensureDemoTeamUser(userEmail: string) {
+    const cleanEmail = userEmail.trim().toLowerCase();
+    const demoTeamUsers: Record<string, { fullName: string; role: "owner" | "manager" | "cashier" }> = {
+      "owner@loyloop.app": { fullName: "Dueno Cafe Central", role: "owner" },
+      "admin@loyloop.app": { fullName: "Admin Cafe Central", role: "manager" },
+      "cajero@loyloop.app": { fullName: "Cajero Cafe Central", role: "cashier" }
+    };
+    const demoUser = demoTeamUsers[cleanEmail];
+
+    if (!demoUser) return;
+
+    const { data: business, error: businessError } = await db
+      .from("businesses")
+      .select("id")
+      .eq("slug", "cafe-central")
+      .maybeSingle();
+
+    if (businessError) throw businessError;
+    if (!business?.id) throw new Error("No se encontro Cafe Central en la base de datos.");
+
+    const { error: appUserError } = await db.from("app_users").upsert({
+      email: cleanEmail,
+      full_name: demoUser.fullName,
+      account_type: "business",
+      business_id: business.id,
+      customer_id: null,
+      business_role: demoUser.role,
+      customer_segment: null,
+      active: true
+    }, { onConflict: "email" });
+
+    if (appUserError) throw appUserError;
+  }
+
   async function submitAuth() {
     setLoading(true);
     setFeedback("");
@@ -93,6 +127,10 @@ export function AuthForm() {
     try {
       if (mode === "client") {
         await ensureCustomerProfile(cleanEmail);
+      }
+
+      if (mode === "team") {
+        await ensureDemoTeamUser(cleanEmail);
       }
 
       const appUser = await getAppUser(cleanEmail);
