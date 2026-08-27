@@ -10,6 +10,14 @@ function generateClaimCode(actionType: ClaimAction) {
   return `${prefix}-${random}`;
 }
 
+function throwSupabaseError(error: unknown, fallback: string): never {
+  if (error instanceof Error) throw error;
+  if (error && typeof error === "object" && "message" in error) {
+    throw new Error(String((error as { message?: unknown }).message));
+  }
+  throw new Error(fallback);
+}
+
 function getDefaultCustomerName(email: string) {
   return email.split("@")[0]?.replace(/[._-]/g, " ") || "Cliente LoyLoop";
 }
@@ -22,7 +30,7 @@ export async function getDemoBusinessAndCustomer(slug = "cafe-central", customer
     .eq("slug", slug)
     .single();
 
-  if (businessError) throw businessError;
+  if (businessError) throwSupabaseError(businessError, "No se pudo cargar el comercio.");
 
   const { data: existingCustomer, error: customerError } = await db
     .from("customer_profiles")
@@ -30,7 +38,7 @@ export async function getDemoBusinessAndCustomer(slug = "cafe-central", customer
     .eq("email", cleanEmail)
     .maybeSingle();
 
-  if (customerError) throw customerError;
+  if (customerError) throwSupabaseError(customerError, "No se pudo cargar el cliente.");
 
   const customer = existingCustomer
     ? existingCustomer
@@ -63,7 +71,7 @@ async function getBusinessBySlug(slug = "cafe-central") {
     .eq("slug", slug)
     .single();
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, "No se pudo cargar el comercio.");
   return business;
 }
 
@@ -96,7 +104,7 @@ export async function createClaimRequest({
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, "No se pudo crear el QR.");
   return data;
 }
 
@@ -109,11 +117,12 @@ async function addStamp(claim: any) {
     .eq("reward_name", "Cafe gratis con 10 sellos")
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, "No se pudo consultar la tarjeta de sellos.");
 
-  const activeCard = card
-    ? card
-    : (await db
+  let activeCard = card;
+
+  if (!activeCard) {
+    const { data: createdCard, error: createCardError } = await db
         .from("stamp_cards")
         .insert({
           business_id: claim.business_id,
@@ -124,7 +133,14 @@ async function addStamp(claim: any) {
           active: true
         })
         .select("*")
-        .single()).data;
+        .single();
+
+    if (createCardError) {
+      throwSupabaseError(createCardError, "No se pudo crear la tarjeta de sellos.");
+    }
+
+    activeCard = createdCard;
+  }
 
   if (!activeCard?.id) throw new Error("No se pudo preparar la tarjeta de sellos.");
 
@@ -139,7 +155,7 @@ async function addStamp(claim: any) {
     .update({ current_stamps: nextStamps })
     .eq("id", activeCard.id);
 
-  if (updateError) throw updateError;
+  if (updateError) throwSupabaseError(updateError, "No se pudo actualizar la tarjeta de sellos.");
 
   await db.from("loyalty_events").insert({
     business_id: claim.business_id,
@@ -147,7 +163,7 @@ async function addStamp(claim: any) {
     event_type: "stamp",
     points_delta: 10,
     metadata: { label: "Sello agregado por validacion QR" }
-  }).throwOnError();
+  });
 
   return { ok: true, message: `Sello agregado. Ahora tiene ${nextStamps}/${activeCard.required_stamps}.` };
 }
@@ -161,7 +177,7 @@ async function redeemStamp(claim: any) {
     .eq("reward_name", "Cafe gratis con 10 sellos")
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throwSupabaseError(error, "No se pudo consultar la tarjeta de sellos.");
 
   if (!card || card.current_stamps < card.required_stamps) {
     return { ok: false, message: "El cliente aun no completa los sellos requeridos." };
@@ -172,14 +188,14 @@ async function redeemStamp(claim: any) {
     .update({ current_stamps: 0 })
     .eq("id", card.id);
 
-  if (updateError) throw updateError;
+  if (updateError) throwSupabaseError(updateError, "No se pudo reiniciar la tarjeta de sellos.");
 
   await db.from("loyalty_events").insert({
     business_id: claim.business_id,
     customer_id: claim.customer_id,
     event_type: "reward_redeem",
     metadata: { label: "Cafe gratis redimido por validacion QR" }
-  }).throwOnError();
+  });
 
   return { ok: true, message: "Recompensa redimida. La tarjeta vuelve a 0 sellos." };
 }
