@@ -19,19 +19,29 @@ export function ClaimValidator() {
     setMessage("");
     setOk(null);
 
-    const response = await fetch("/api/claim-requests/validate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code: cleanCode,
-        businessSlug: "cafe-central"
-      })
-    });
+    try {
+      const response = await fetch("/api/claim-requests/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: cleanCode,
+          businessSlug: "cafe-central"
+        })
+      });
 
-    const result = await response.json();
-    setLoading(false);
-    setOk(Boolean(result.ok));
-    setMessage(result.message ?? "Validacion procesada.");
+      const result = await response.json().catch(() => ({
+        ok: false,
+        message: "El servidor respondio con un formato inesperado."
+      }));
+
+      setOk(Boolean(result.ok));
+      setMessage(result.message ?? "Validacion procesada.");
+    } catch (error) {
+      setOk(false);
+      setMessage(error instanceof Error ? error.message : "No se pudo conectar con el servidor.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

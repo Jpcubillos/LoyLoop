@@ -56,6 +56,17 @@ export async function getDemoBusinessAndCustomer(slug = "cafe-central", customer
   return { business, customer };
 }
 
+async function getBusinessBySlug(slug = "cafe-central") {
+  const { data: business, error } = await db
+    .from("businesses")
+    .select("*")
+    .eq("slug", slug)
+    .single();
+
+  if (error) throw error;
+  return business;
+}
+
 export async function createClaimRequest({
   actionType,
   businessSlug = "cafe-central",
@@ -136,7 +147,7 @@ async function addStamp(claim: any) {
     event_type: "stamp",
     points_delta: 10,
     metadata: { label: "Sello agregado por validacion QR" }
-  });
+  }).throwOnError();
 
   return { ok: true, message: `Sello agregado. Ahora tiene ${nextStamps}/${activeCard.required_stamps}.` };
 }
@@ -168,7 +179,7 @@ async function redeemStamp(claim: any) {
     customer_id: claim.customer_id,
     event_type: "reward_redeem",
     metadata: { label: "Cafe gratis redimido por validacion QR" }
-  });
+  }).throwOnError();
 
   return { ok: true, message: "Recompensa redimida. La tarjeta vuelve a 0 sellos." };
 }
@@ -240,7 +251,7 @@ async function activatePointsBoost(claim: any) {
 
 export async function validateClaimRequest(code: string, businessSlug = "cafe-central") {
   const normalizedCode = code.trim().toUpperCase();
-  const { business } = await getDemoBusinessAndCustomer(businessSlug);
+  const business = await getBusinessBySlug(businessSlug);
 
   const { data: claim, error } = await db
     .from("claim_requests")
