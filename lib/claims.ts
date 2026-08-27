@@ -23,7 +23,12 @@ function getDefaultCustomerName(email: string) {
 }
 
 export async function getDemoBusinessAndCustomer(slug = "cafe-central", customerEmail?: string) {
-  const cleanEmail = customerEmail?.trim().toLowerCase() || "juan@loyloop.app";
+  const cleanEmail = customerEmail?.trim().toLowerCase();
+
+  if (!cleanEmail) {
+    throw new Error("Inicia sesion para generar este QR.");
+  }
+
   const { data: business, error: businessError } = await db
     .from("businesses")
     .select("*")
