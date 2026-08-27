@@ -10,7 +10,12 @@ function generateClaimCode(actionType: ClaimAction) {
   return `${prefix}-${random}`;
 }
 
-export async function getDemoBusinessAndCustomer(slug = "cafe-central") {
+function getDefaultCustomerName(email: string) {
+  return email.split("@")[0]?.replace(/[._-]/g, " ") || "Cliente LoyLoop";
+}
+
+export async function getDemoBusinessAndCustomer(slug = "cafe-central", customerEmail?: string) {
+  const cleanEmail = customerEmail?.trim().toLowerCase() || "juan@loyloop.app";
   const { data: business, error: businessError } = await db
     .from("businesses")
     .select("*")
@@ -19,13 +24,34 @@ export async function getDemoBusinessAndCustomer(slug = "cafe-central") {
 
   if (businessError) throw businessError;
 
-  const { data: customer, error: customerError } = await db
+  const { data: existingCustomer, error: customerError } = await db
     .from("customer_profiles")
     .select("*")
-    .eq("email", "juan@loyloop.app")
-    .single();
+    .eq("email", cleanEmail)
+    .maybeSingle();
 
   if (customerError) throw customerError;
+
+  const customer = existingCustomer
+    ? existingCustomer
+    : (await db
+        .from("customer_profiles")
+        .insert({
+          full_name: getDefaultCustomerName(cleanEmail),
+          email: cleanEmail
+        })
+        .select("*")
+        .single()).data;
+
+  if (!customer?.id) throw new Error("No se pudo preparar el cliente del QR.");
+
+  await db.from("business_memberships").upsert({
+    business_id: business.id,
+    customer_id: customer.id,
+    points_balance: 0,
+    credit_balance_cents: 0,
+    tier: "Nuevo"
+  }, { onConflict: "business_id,customer_id", ignoreDuplicates: true });
 
   return { business, customer };
 }
@@ -33,13 +59,15 @@ export async function getDemoBusinessAndCustomer(slug = "cafe-central") {
 export async function createClaimRequest({
   actionType,
   businessSlug = "cafe-central",
+  customerEmail,
   payload = {}
 }: {
   actionType: ClaimAction;
   businessSlug?: string;
+  customerEmail?: string;
   payload?: Record<string, unknown>;
 }) {
-  const { business, customer } = await getDemoBusinessAndCustomer(businessSlug);
+  const { business, customer } = await getDemoBusinessAndCustomer(businessSlug, customerEmail);
   const code = generateClaimCode(actionType);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
@@ -68,20 +96,37 @@ async function addStamp(claim: any) {
     .eq("business_id", claim.business_id)
     .eq("customer_id", claim.customer_id)
     .eq("reward_name", "Cafe gratis con 10 sellos")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
 
-  if (card.current_stamps >= card.required_stamps) {
+  const activeCard = card
+    ? card
+    : (await db
+        .from("stamp_cards")
+        .insert({
+          business_id: claim.business_id,
+          customer_id: claim.customer_id,
+          reward_name: "Cafe gratis con 10 sellos",
+          current_stamps: 0,
+          required_stamps: 10,
+          active: true
+        })
+        .select("*")
+        .single()).data;
+
+  if (!activeCard?.id) throw new Error("No se pudo preparar la tarjeta de sellos.");
+
+  if (activeCard.current_stamps >= activeCard.required_stamps) {
     return { ok: false, message: "El cliente ya llego al maximo de sellos." };
   }
 
-  const nextStamps = card.current_stamps + 1;
+  const nextStamps = activeCard.current_stamps + 1;
 
   const { error: updateError } = await db
     .from("stamp_cards")
     .update({ current_stamps: nextStamps })
-    .eq("id", card.id);
+    .eq("id", activeCard.id);
 
   if (updateError) throw updateError;
 
@@ -93,7 +138,7 @@ async function addStamp(claim: any) {
     metadata: { label: "Sello agregado por validacion QR" }
   });
 
-  return { ok: true, message: `Sello agregado. Ahora tiene ${nextStamps}/${card.required_stamps}.` };
+  return { ok: true, message: `Sello agregado. Ahora tiene ${nextStamps}/${activeCard.required_stamps}.` };
 }
 
 async function redeemStamp(claim: any) {
@@ -103,11 +148,11 @@ async function redeemStamp(claim: any) {
     .eq("business_id", claim.business_id)
     .eq("customer_id", claim.customer_id)
     .eq("reward_name", "Cafe gratis con 10 sellos")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
 
-  if (card.current_stamps < card.required_stamps) {
+  if (!card || card.current_stamps < card.required_stamps) {
     return { ok: false, message: "El cliente aun no completa los sellos requeridos." };
   }
 
