@@ -55,6 +55,16 @@ async function getBusiness(slug = "cafe-central") {
   return data;
 }
 
+function readNonNegativeInteger(formData: FormData, field: string, fallback = 0, minimum = 0) {
+  const raw = String(formData.get(field) ?? "").trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new Error("Revisa los valores numéricos del formulario.");
+  }
+  return value;
+}
+
 function getSchedule(formData: FormData) {
   const durationType = String(formData.get("duration_type") ?? "indefinite");
   const startValue = String(formData.get("starts_at") ?? "");
@@ -84,17 +94,17 @@ function getSchedule(formData: FormData) {
   };
 }
 
-export async function createReward(formData: FormData) {
+async function persist_createReward(formData: FormData) {
   try {
     const business = await getBusiness();
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "product");
-    const points = Number(formData.get("points_required") ?? 0);
-    const creditAmount = Number(formData.get("credit_amount_cents") ?? 0);
+    const points = readNonNegativeInteger(formData, "points_required");
+    const creditAmount = readNonNegativeInteger(formData, "credit_amount_cents");
     const description = String(formData.get("description") ?? "").trim();
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
 
-    if (!name) return;
+    if (!name) throw new Error("El nombre es obligatorio.");
 
     const { error } = await db.from("rewards").insert({
       business_id: business.id,
@@ -112,21 +122,21 @@ export async function createReward(formData: FormData) {
     revalidatePath("/c/cafe-central");
     revalidatePath("/c/recompensas");
   } catch (error) {
-    logDemoBackendWarning("createReward", error);
+    throw error;
   }
 }
 
-export async function updateReward(formData: FormData) {
+async function persist_updateReward(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "product");
-    const points = Number(formData.get("points_required") ?? 0);
-    const creditAmount = Number(formData.get("credit_amount_cents") ?? 0);
+    const points = readNonNegativeInteger(formData, "points_required");
+    const creditAmount = readNonNegativeInteger(formData, "credit_amount_cents");
     const description = String(formData.get("description") ?? "").trim();
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
 
-    if (!id || !name) return;
+    if (!id || !name) throw new Error("El nombre es obligatorio.");
 
     const { error } = await db
       .from("rewards")
@@ -145,14 +155,14 @@ export async function updateReward(formData: FormData) {
     revalidatePath("/c/cafe-central");
     revalidatePath("/c/recompensas");
   } catch (error) {
-    logDemoBackendWarning("updateReward", error);
+    throw error;
   }
 }
 
-export async function deleteReward(formData: FormData) {
+async function persist_deleteReward(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
-    if (!id) return;
+    if (!id) throw new Error("No encontramos el registro.");
 
     const { error } = await db.from("rewards").delete().eq("id", id);
 
@@ -161,22 +171,22 @@ export async function deleteReward(formData: FormData) {
     revalidatePath("/c/cafe-central");
     revalidatePath("/c/recompensas");
   } catch (error) {
-    logDemoBackendWarning("deleteReward", error);
+    throw error;
   }
 }
 
-export async function createMission(formData: FormData) {
+async function persist_createMission(formData: FormData) {
   try {
     const business = await getBusiness();
     const name = String(formData.get("name") ?? "").trim();
     const category = String(formData.get("category") ?? "frequency");
-    const goal = Number(formData.get("goal") ?? 1);
-    const rewardPoints = Number(formData.get("reward_points") ?? 0);
+    const goal = readNonNegativeInteger(formData, "goal", 1, 1);
+    const rewardPoints = readNonNegativeInteger(formData, "reward_points");
     const description = String(formData.get("description") ?? "").trim();
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
     const schedule = getSchedule(formData);
 
-    if (!name) return;
+    if (!name) throw new Error("El nombre es obligatorio.");
 
     const { error } = await db.from("missions").insert({
       business_id: business.id,
@@ -196,22 +206,22 @@ export async function createMission(formData: FormData) {
     revalidatePath("/dashboard/misiones");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("createMission", error);
+    throw error;
   }
 }
 
-export async function updateMission(formData: FormData) {
+async function persist_updateMission(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
     const name = String(formData.get("name") ?? "").trim();
     const category = String(formData.get("category") ?? "frequency");
-    const goal = Number(formData.get("goal") ?? 1);
-    const rewardPoints = Number(formData.get("reward_points") ?? 0);
+    const goal = readNonNegativeInteger(formData, "goal", 1, 1);
+    const rewardPoints = readNonNegativeInteger(formData, "reward_points");
     const description = String(formData.get("description") ?? "").trim();
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
     const schedule = getSchedule(formData);
 
-    if (!id || !name) return;
+    if (!id || !name) throw new Error("El nombre es obligatorio.");
 
     const { error } = await db
       .from("missions")
@@ -232,22 +242,28 @@ export async function updateMission(formData: FormData) {
     revalidatePath("/dashboard/misiones");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("updateMission", error);
+    throw error;
   }
 }
 
-export async function createCampaign(formData: FormData) {
+async function persist_createCampaign(formData: FormData) {
   try {
     const business = await getBusiness();
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "discount_redeem");
     const description = String(formData.get("description") ?? "").trim();
-    const discountPercent = Number(formData.get("discount_percent") ?? 0);
-    const rewardPoints = Number(formData.get("reward_points") ?? 0);
+    const discountPercent = readNonNegativeInteger(formData, "discount_percent");
+    const rewardPoints = readNonNegativeInteger(formData, "reward_points");
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
     const schedule = getSchedule(formData);
 
-    if (!name) return;
+    if (!name) throw new Error("El nombre es obligatorio.");
+    if (type === "discount_redeem" && (discountPercent < 1 || discountPercent > 100)) {
+      throw new Error("El descuento debe estar entre 1 y 100%. ");
+    }
+    if (type === "points_boost" && rewardPoints < 1) {
+      throw new Error("La promoción debe entregar al menos 1 punto.");
+    }
 
     const { error } = await db.from("campaigns").insert({
       business_id: business.id,
@@ -268,22 +284,28 @@ export async function createCampaign(formData: FormData) {
     revalidatePath("/dashboard/campanas");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("createCampaign", error);
+    throw error;
   }
 }
 
-export async function updateCampaign(formData: FormData) {
+async function persist_updateCampaign(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
     const name = String(formData.get("name") ?? "").trim();
     const type = String(formData.get("type") ?? "discount_redeem");
     const description = String(formData.get("description") ?? "").trim();
-    const discountPercent = Number(formData.get("discount_percent") ?? 0);
-    const rewardPoints = Number(formData.get("reward_points") ?? 0);
+    const discountPercent = readNonNegativeInteger(formData, "discount_percent");
+    const rewardPoints = readNonNegativeInteger(formData, "reward_points");
     const audienceSegment = String(formData.get("audience_segment") ?? "active");
     const schedule = getSchedule(formData);
 
-    if (!id || !name) return;
+    if (!id || !name) throw new Error("El nombre es obligatorio.");
+    if (type === "discount_redeem" && (discountPercent < 1 || discountPercent > 100)) {
+      throw new Error("El descuento debe estar entre 1 y 100%.");
+    }
+    if (type === "points_boost" && rewardPoints < 1) {
+      throw new Error("La promoción debe entregar al menos 1 punto.");
+    }
 
     const { error } = await db
       .from("campaigns")
@@ -305,14 +327,14 @@ export async function updateCampaign(formData: FormData) {
     revalidatePath("/dashboard/campanas");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("updateCampaign", error);
+    throw error;
   }
 }
 
-export async function deleteMission(formData: FormData) {
+async function persist_deleteMission(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
-    if (!id) return;
+    if (!id) throw new Error("No encontramos el registro.");
 
     const { error } = await db.from("missions").delete().eq("id", id);
 
@@ -320,14 +342,14 @@ export async function deleteMission(formData: FormData) {
     revalidatePath("/dashboard/misiones");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("deleteMission", error);
+    throw error;
   }
 }
 
-export async function deleteCampaign(formData: FormData) {
+async function persist_deleteCampaign(formData: FormData) {
   try {
     const id = String(formData.get("id") ?? "");
-    if (!id) return;
+    if (!id) throw new Error("No encontramos el registro.");
 
     const { error } = await db.from("campaigns").delete().eq("id", id);
 
@@ -335,8 +357,48 @@ export async function deleteCampaign(formData: FormData) {
     revalidatePath("/dashboard/campanas");
     revalidatePath("/c/cafe-central");
   } catch (error) {
-    logDemoBackendWarning("deleteCampaign", error);
+    throw error;
   }
+}
+
+async function finishMutation(action: string, route: string, mutate: () => Promise<void>) {
+  let result = "success";
+  try {
+    await mutate();
+  } catch (error) {
+    logDemoBackendWarning(action, error);
+    result = "error";
+  }
+
+  redirect(`${route}?result=${result}`);
+}
+
+export async function createReward(formData: FormData) {
+  await finishMutation("createReward", "/dashboard/recompensas", () => persist_createReward(formData));
+}
+export async function updateReward(formData: FormData) {
+  await finishMutation("updateReward", "/dashboard/recompensas", () => persist_updateReward(formData));
+}
+export async function deleteReward(formData: FormData) {
+  await finishMutation("deleteReward", "/dashboard/recompensas", () => persist_deleteReward(formData));
+}
+export async function createMission(formData: FormData) {
+  await finishMutation("createMission", "/dashboard/misiones", () => persist_createMission(formData));
+}
+export async function updateMission(formData: FormData) {
+  await finishMutation("updateMission", "/dashboard/misiones", () => persist_updateMission(formData));
+}
+export async function deleteMission(formData: FormData) {
+  await finishMutation("deleteMission", "/dashboard/misiones", () => persist_deleteMission(formData));
+}
+export async function createCampaign(formData: FormData) {
+  await finishMutation("createCampaign", "/dashboard/campanas", () => persist_createCampaign(formData));
+}
+export async function updateCampaign(formData: FormData) {
+  await finishMutation("updateCampaign", "/dashboard/campanas", () => persist_updateCampaign(formData));
+}
+export async function deleteCampaign(formData: FormData) {
+  await finishMutation("deleteCampaign", "/dashboard/campanas", () => persist_deleteCampaign(formData));
 }
 
 export async function joinBusiness(slug = "cafe-central") {

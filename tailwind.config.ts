@@ -8,23 +8,23 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#0f172a",
-        muted: "#64748b",
-        cloud: "#f8fafc",
-        line: "#e2e8f0",
+        ink: "#101F3C",
+        muted: "#7A7D8E",
+        cloud: "#FCFAFB",
+        line: "#E5E8F0",
         brand: {
-          50: "#eff6ff",
-          100: "#dbeafe",
-          500: "#2563eb",
-          600: "#1d4ed8",
-          700: "#1e40af"
+          50: "#FFF0F2",
+          100: "#FFDDE3",
+          500: "#FF6B6B",
+          600: "#FA4059",
+          700: "#D5314B"
         },
-        reward: "#10b981",
-        points: "#f59e0b",
-        coral: "#f97316"
+        reward: "#22C55E",
+        points: "#F6D65A",
+        coral: "#FF6B6B"
       },
       boxShadow: {
-        soft: "0 18px 45px rgba(15, 23, 42, 0.08)"
+        soft: "0 12px 34px rgba(26, 31, 59, 0.06), 0 3px 10px rgba(255, 107, 107, 0.04)"
       }
     }
   },

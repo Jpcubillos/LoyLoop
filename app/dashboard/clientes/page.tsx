@@ -33,7 +33,7 @@ export default function ClientesPage() {
         ))}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-line bg-white">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-line bg-white">
         <table className="w-full min-w-[780px] text-left text-sm">
           <thead className="border-b border-line bg-slate-50 text-xs uppercase text-muted">
             <tr>

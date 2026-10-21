@@ -15,7 +15,7 @@ export default function AnaliticasPage() {
           ["6,4", "Visitas por cliente"],
           ["31", "Referidos este mes"]
         ].map(([value, label]) => (
-          <div key={label} className="rounded-lg border border-line bg-white p-5">
+          <div key={label} className="admin-stat rounded-lg border border-line bg-white p-5">
             <p className="text-3xl font-black">{value}</p>
             <p className="mt-1 text-sm text-muted">{label}</p>
           </div>
@@ -29,7 +29,7 @@ export default function AnaliticasPage() {
             {chart.map((value, index) => (
               <div key={index} className="flex flex-1 flex-col items-center gap-2">
                 <div className="flex w-full flex-1 items-end rounded bg-brand-50">
-                  <div className="w-full rounded-t-lg bg-brand-500" style={{ height: `${value}%` }} />
+                  <div className="admin-chart-bar w-full rounded-t-lg" style={{ height: `${value}%` }} />
                 </div>
                 <span className="text-xs text-muted">{["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][index]}</span>
               </div>

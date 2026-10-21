@@ -7,15 +7,15 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "primary", ...props }: ButtonProps) {
   const variants = {
-    primary: "bg-brand-500 text-white hover:bg-brand-600",
-    secondary: "border border-line bg-white text-ink hover:bg-slate-50",
-    ghost: "text-muted hover:bg-slate-100 hover:text-ink"
+    primary: "bg-brand-600 text-white hover:bg-brand-700",
+    secondary: "border border-brand-100 bg-white text-brand-700 hover:bg-brand-50",
+    ghost: "text-muted hover:bg-brand-50 hover:text-brand-700"
   };
 
   return (
     <button
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
+        "inline-flex h-10 items-center justify-center gap-2 rounded-[14px] px-4 text-sm font-semibold transition",
         variants[variant],
         className
       )}
@@ -27,7 +27,7 @@ export function Button({ className, variant = "primary", ...props }: ButtonProps
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-line bg-white shadow-sm", className)}
+      className={cn("rounded-[20px] border border-line bg-white shadow-soft", className)}
       {...props}
     />
   );

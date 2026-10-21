@@ -32,7 +32,7 @@ export default function DashboardPage() {
         {dashboardStats.map((stat, index) => {
           const Icon = statIcons[index];
           return (
-            <div key={stat.label} className="rounded-lg border border-line bg-white p-5">
+            <div key={stat.label} className="admin-stat rounded-lg border border-line bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-sm text-muted">{stat.label}</p>
@@ -116,7 +116,7 @@ export default function DashboardPage() {
             {chart.map((value, index) => (
               <div key={index} className="flex flex-1 flex-col items-center gap-2">
                 <div className="flex w-full flex-1 items-end">
-                  <div className="w-full rounded-t-lg bg-brand-500" style={{ height: `${value}%` }} />
+                  <div className="admin-chart-bar w-full rounded-t-lg" style={{ height: `${value}%` }} />
                 </div>
                 <span className="text-xs text-muted">{["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][index]}</span>
               </div>

@@ -240,10 +240,6 @@ to anon, authenticated
 with check (true);
 
 drop policy if exists "Demo can read business leads" on public.business_leads;
-create policy "Demo can read business leads"
-on public.business_leads for select
-to anon, authenticated
-using (true);
 
 drop policy if exists "Public can read rewards" on public.rewards;
 create policy "Public can read rewards"

@@ -28,7 +28,7 @@ export default function QrPage() {
 
         <div className="rounded-lg border border-line bg-white p-5">
           <h2 className="font-black">Cartel para mostrador</h2>
-          <div className="mt-5 grid min-h-[520px] place-items-center rounded-lg bg-brand-500 p-8 text-center text-white">
+          <div className="admin-poster mt-5 grid min-h-[520px] place-items-center rounded-[22px] p-8 text-center text-white">
             <div className="max-w-sm">
               <div className="mx-auto grid h-32 w-32 place-items-center rounded-lg bg-white text-brand-600">
                 <QrCode className="h-24 w-24" />

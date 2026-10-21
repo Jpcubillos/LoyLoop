@@ -1,5 +1,6 @@
 <svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="28" fill="#2563EB"/>
+  <defs><linearGradient id="loyloop" x1="0" y1="0" x2="128" y2="128"><stop stop-color="#FF6B6B"/><stop offset="0.55" stop-color="#FA4059"/><stop offset="1" stop-color="#FF4D8D"/></linearGradient></defs>
+  <rect width="128" height="128" rx="28" fill="url(#loyloop)"/>
   <rect x="37" y="46" width="54" height="36" rx="18" stroke="#FFFFFF" stroke-width="10"/>
   <rect x="46" y="31" width="36" height="66" rx="18" stroke="#FFFFFF" stroke-opacity="0.82" stroke-width="10"/>
   <circle cx="95" cy="33" r="8" fill="#FFFFFF"/>

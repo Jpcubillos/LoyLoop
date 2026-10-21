@@ -162,9 +162,21 @@ function toDateTimeInput(value?: string | null) {
   return date.toISOString().slice(0, 16);
 }
 
+async function getCafeCentralForOffers() {
+  const { data, error } = await db
+    .from("businesses")
+    .select("*")
+    .eq("slug", "cafe-central")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("No se encontró Café Central en Supabase.");
+  return data;
+}
+
 export async function getDashboardRewards(): Promise<DashboardReward[]> {
-  const business = await getCafeCentral();
-  if (!business) return getFallbackRewards();
+  const business = await getCafeCentralForOffers();
+  if (!business) return [];
 
   const { data, error } = await db
     .from("rewards")
@@ -172,7 +184,8 @@ export async function getDashboardRewards(): Promise<DashboardReward[]> {
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
-  if (error || !data.length) return getFallbackRewards();
+  if (error) throw error;
+  if (!data?.length) return [];
 
   return data.map((reward: any) => ({
     id: reward.id,
@@ -191,23 +204,8 @@ export async function getDashboardRewards(): Promise<DashboardReward[]> {
 }
 
 export async function getDashboardMissions(): Promise<DashboardMission[]> {
-  const business = await getCafeCentral();
-  if (!business) {
-    return fallbackMissions.map((mission) => ({
-      ...mission,
-      id: mission.name,
-      categoryValue: "frequency",
-      description: "Mision demo",
-      audience: "Activo",
-      audienceSegment: "active",
-      schedule: "Tiempo indefinido",
-      durationType: "indefinite",
-      startsAtInput: "",
-      endsAtInput: "",
-      goal: 1,
-      rewardPoints: 30
-    }));
-  }
+  const business = await getCafeCentralForOffers();
+  if (!business) return [];
 
   const { data, error } = await db
     .from("missions")
@@ -215,22 +213,8 @@ export async function getDashboardMissions(): Promise<DashboardMission[]> {
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
-  if (error || !data.length) {
-    return fallbackMissions.map((mission) => ({
-      ...mission,
-      id: mission.name,
-      categoryValue: "frequency",
-      description: "Mision demo",
-      audience: "Activo",
-      audienceSegment: "active",
-      schedule: "Tiempo indefinido",
-      durationType: "indefinite",
-      startsAtInput: "",
-      endsAtInput: "",
-      goal: 1,
-      rewardPoints: 30
-    }));
-  }
+  if (error) throw error;
+  if (!data?.length) return [];
 
   return data.map((mission: any) => ({
     id: mission.id,
@@ -253,8 +237,8 @@ export async function getDashboardMissions(): Promise<DashboardMission[]> {
 }
 
 export async function getDashboardCampaigns(): Promise<DashboardCampaign[]> {
-  const business = await getCafeCentral();
-  if (!business) return getFallbackCampaigns();
+  const business = await getCafeCentralForOffers();
+  if (!business) return [];
 
   const { data, error } = await db
     .from("campaigns")
@@ -262,13 +246,15 @@ export async function getDashboardCampaigns(): Promise<DashboardCampaign[]> {
     .eq("business_id", business.id)
     .order("created_at", { ascending: false });
 
-  if (error || !data.length) return getFallbackCampaigns();
+  if (error) throw error;
+  if (!data?.length) return [];
 
   const campaignIds = data.map((campaign: any) => campaign.id);
-  const { data: redemptions } = await db
+  const { data: redemptions, error: redemptionsError } = await db
     .from("campaign_redemptions")
     .select("campaign_id")
     .in("campaign_id", campaignIds);
+  if (redemptionsError) throw redemptionsError;
 
   return data.map((campaign: any) => {
     const redemptionCount = redemptions?.filter((item: any) => item.campaign_id === campaign.id).length ?? 0;

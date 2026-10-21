@@ -9,11 +9,16 @@ const segments = [
   { value: "vip", label: "VIP" }
 ];
 
-export default async function RecompensasPage() {
-  const rewards = await getDashboardRewards();
+export default async function RecompensasPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
+  const [{ result }, rewards] = await Promise.all([searchParams, getDashboardRewards()]);
 
   return (
     <>
+      {result && (
+        <div role="status" aria-live="polite" className={result === "success" ? "mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" : "mb-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"}>
+          {result === "success" ? "Cambios guardados correctamente." : "No se pudo guardar. Revisa los datos e inténtalo de nuevo."}
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black">Recompensas</h1>
@@ -66,7 +71,9 @@ export default async function RecompensasPage() {
         </form>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {rewards.map((reward) => (
+          {rewards.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-line bg-white p-6 text-sm text-muted">Aún no hay recompensas. Crea la primera desde este formulario.</p>
+          ) : rewards.map((reward) => (
             <div key={reward.id} className="rounded-lg border border-line bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">

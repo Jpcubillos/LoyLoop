@@ -17,11 +17,16 @@ const segments = [
   { value: "vip", label: "VIP" }
 ];
 
-export default async function MisionesPage() {
-  const missions = await getDashboardMissions();
+export default async function MisionesPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
+  const [{ result }, missions] = await Promise.all([searchParams, getDashboardMissions()]);
 
   return (
     <>
+      {result && (
+        <div role="status" aria-live="polite" className={result === "success" ? "mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" : "mb-5 rounded-xl bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"}>
+          {result === "success" ? "Cambios guardados correctamente." : "No se pudo guardar. Revisa los datos e inténtalo de nuevo."}
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black">Misiones</h1>
@@ -99,7 +104,9 @@ export default async function MisionesPage() {
         </form>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {missions.map((mission) => (
+          {missions.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-line bg-white p-6 text-sm text-muted">Aún no hay misiones. Crea la primera desde este formulario.</p>
+          ) : missions.map((mission) => (
             <div key={mission.id} className="rounded-lg border border-line bg-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
