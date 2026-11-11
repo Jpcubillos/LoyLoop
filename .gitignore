@@ -47,3 +47,10 @@ example
 .design-reference/
 test-results/
 playwright-report/
+
+# Django local artifacts
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.sqlite3
+backend/.coverage

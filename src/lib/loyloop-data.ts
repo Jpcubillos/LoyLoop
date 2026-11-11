@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { canClaimOffer, type OfferKind } from "@/lib/loyalty-rules";
 import type { ClaimAction } from "@/lib/claims";
+import { currentCustomerId } from "@/lib/customer-identity";
 
-export const isDemo =
-  !isSupabaseConfigured || process.env.EXPO_PUBLIC_DEMO_MODE === "true";
+export const isDemo = process.env.EXPO_PUBLIC_DEMO_MODE === "true";
 export type BusinessSummary = {
   id: string;
   slug: string;
@@ -172,32 +172,8 @@ export const fallbackBusinesses: BusinessSummary[] = [
 export function nextCommerceTier(points: number) {
   return points < 100 ? "Frecuente" : points < 250 ? "Distinguido" : "VIP";
 }
-async function customerId(create = false) {
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
-  if (error) throw error;
-  if (!session?.user.email) return null;
-  const email = session.user.email.toLowerCase();
-  const { data, error: lookupError } = await supabase
-    .from("customer_profiles")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-  if (lookupError) throw lookupError;
-  if (data) return data.id as string;
-  if (!create) return null;
-  const result = await supabase
-    .from("customer_profiles")
-    .insert({
-      email,
-      full_name: session.user.user_metadata.full_name || email.split("@")[0],
-    })
-    .select("id")
-    .single();
-  if (result.error) throw result.error;
-  return result.data.id as string;
+async function customerId() {
+  return currentCustomerId();
 }
 export async function getBusinesses(): Promise<BusinessSummary[]> {
   if (isDemo) {
@@ -309,7 +285,7 @@ export async function joinBusiness(business: BusinessSummary) {
     );
     return;
   }
-  const id = await customerId(true);
+  const id = await customerId();
   if (!id) throw new Error("Inicia sesión para unirte a este comercio.");
   const { error } = await supabase.from("business_memberships").upsert(
     {

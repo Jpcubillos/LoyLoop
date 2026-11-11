@@ -10,6 +10,7 @@ import { ActivityIndicator, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppearanceProvider } from "@/components/AppearanceProvider";
+import { SessionLifecycle } from "@/components/SessionLifecycle";
 
 export default function TabLayout() {
   const [loaded, error] = useFonts({
@@ -27,6 +28,7 @@ export default function TabLayout() {
   return (
     <SafeAreaProvider>
       <AppearanceProvider>
+        <SessionLifecycle />
         <StatusBar style="dark" />
         <Stack
           screenOptions={{

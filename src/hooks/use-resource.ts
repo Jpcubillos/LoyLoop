@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
+import { supabase } from "@/lib/supabase";
 
 export function useResource<T>(loader: () => Promise<T>) {
   const [data, setData] = useState<T>();
@@ -26,9 +27,35 @@ export function useResource<T>(loader: () => Promise<T>) {
   }, [loader]);
   useFocusEffect(
     useCallback(() => {
+      // A different account may have signed in while this route was unfocused.
+      setData(undefined);
       void reload();
+      let userId: string | null | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "INITIAL_SESSION") {
+          userId = session?.user.id ?? null;
+          return;
+        }
+        const nextId = session?.user.id ?? null;
+        if (nextId === userId && event !== "USER_UPDATED") return;
+        userId = nextId;
+        generation.current++;
+        setData(undefined);
+        setError("");
+        setLoading(true);
+        // Auth callbacks must finish before loaders call Auth again.
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void reload();
+        }, 0);
+      });
       return () => {
         generation.current++;
+        subscription.unsubscribe();
+        if (timer) clearTimeout(timer);
       };
     }, [reload]),
   );

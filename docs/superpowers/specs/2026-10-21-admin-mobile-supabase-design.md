@@ -1,5 +1,7 @@
 ﻿# LoyLoop: sincronización de ofertas del admin con la app móvil
 
+> Especificación histórica del alcance de sincronización de ofertas. Posteriormente se añadió aprobación/publicación de solicitudes de comercios. Consultar [el contexto vigente](../../project-context.md) antes de usar las secciones «Fuera de alcance» o «Estado actual» como descripción del producto actual.
+
 ## Objetivo
 
 Cuando el equipo cree, edite, active o elimine una recompensa, misión o campaña desde el panel de administración, la app móvil debe reflejar el estado guardado en Supabase en la sección del producto que corresponda.

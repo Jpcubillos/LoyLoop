@@ -1,5 +1,7 @@
 # LoyLoop: actualización móvil desde Figma
 
+> Entrega histórica de la actualización visual. Para implementar nuevas HUs, leer primero [project-context.md](project-context.md) y `../AGENTS.md`. Las comprobaciones de este documento corresponden a aquella entrega; el estado remoto de la migración móvil sigue pendiente de confirmación.
+
 ## Implementación
 
 Referencia: archivo `UITegQ7U4n3fBriaUnLZZE`, tablero `528:2009`.
