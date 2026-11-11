@@ -12,12 +12,12 @@ El cliente descubre comercios, se inscribe, participa en misiones/visitas/compra
 
 | Área | Ubicación | Responsabilidad |
 | --- | --- | --- |
-| Móvil | Este repositorio, `LoyLoopMobile` | Expo SDK 57, React Native, TypeScript, Expo Router, Supabase |
-| Admin/backend | `../LoyLoop` | Panel web, acciones de ofertas, validación de reclamos, esquema SQL y aprobación de comercios |
-| Django API (base local) | `backend/` en este workspace | Bootstrap independiente LL-232; todavía sin conexión a PostgreSQL ni endpoints de negocio |
+| Móvil | `mobile/` en el repositorio `LoyLoop` | Expo SDK 57, React Native, TypeScript, Expo Router, Supabase |
+| Admin/backend | Raíz del repositorio | Panel web, acciones de ofertas, validación de reclamos, esquema SQL y aprobación de comercios |
+| Django API (base local) | `backend/` en la raíz | Bootstrap independiente LL-232; todavía sin conexión a PostgreSQL ni endpoints de negocio |
 | Base de datos | Supabase compartido | Comercios, perfiles, membresías, ofertas, progreso y reclamos |
 
-Remotos: `Jpcubillos/LoyLoopMobile` y `Jpcubillos/LoyLoop`. Son repositorios independientes: commits y despliegues se gestionan por separado. El proyecto Supabase configurado durante esta entrega es `phvuowulzkrttgcfnvly`; verificar siempre el entorno antes de ejecutar SQL.
+El repositorio integrado usa `Jpcubillos/LoyLoop`; el historial anterior de `Jpcubillos/LoyLoopMobile` se preserva en la integración. Los despliegues web, móvil y Django siguen siendo independientes. El proyecto Supabase configurado anteriormente es `phvuowulzkrttgcfnvly`; verificar siempre el entorno antes de ejecutar SQL.
 
 La decisión objetivo de la épica Jira **LL-231** es Django/DRF como API y dueño de la lógica/esquema de negocio, PostgreSQL alojado en Supabase y Supabase Auth para identidad. La migración es progresiva: en el estado actual, móvil y admin todavía usan las integraciones existentes descritas abajo; el bootstrap Django de LL-232 no las reemplaza ni se conecta todavía a Supabase. LL-235 cubre la conexión y gestión del esquema PostgreSQL. No presentar la arquitectura objetivo como ya desplegada.
 
@@ -72,7 +72,7 @@ Tablas relevantes: `businesses`, `business_leads`, `customer_profiles`, `app_use
 
 ## Estado confirmado y pendientes
 
-LL-232/LL-233/LL-234: se añadió en `backend/` un bootstrap Django/DRF independiente con settings local/producción, variables explícitas para clave, hosts, CORS y TLS, `GET /health/` de vida, pruebas y workflow de CI. El healthcheck no comprueba la base de datos. SQLite se usa solo en local; producción usa un motor dummy hasta LL-235. No hay endpoints de negocio, verificación JWT, despliegue ni conexión real a Supabase en esta entrega. Detalles y evidencia: [LL-232](hus/LL-232.md) y [README del backend](../backend/README.md).
+LL-232/LL-233/LL-234: se añadió en `backend/` un bootstrap Django/DRF independiente con settings local/producción, variables explícitas para clave, hosts, CORS y TLS, `GET /health/` de vida, pruebas y workflow de CI. El healthcheck no comprueba la base de datos. SQLite se usa solo en local; producción usa un motor dummy hasta LL-235. No hay endpoints de negocio, verificación JWT, despliegue ni conexión real a Supabase en esta entrega. Detalles y evidencia: [LL-232](hus/LL-232.md) y [README del backend](../../backend/README.md).
 
 LL-11 (LL-39 y LL-40) tiene implementación local de registro, confirmación por código, acceso/cierre y recuperación por código. La identidad nueva se vincula por `auth.users.id` a través de `customer_identities` y `ensure_loyloop_customer_identity`, sin recrear perfiles históricos. La recuperación usa un cliente sin persistencia; la sesión normal nativa se guarda en SecureStore. Las consultas limpian datos al reenfocar o cambiar de cuenta y el modo demo ahora requiere activación explícita.
 

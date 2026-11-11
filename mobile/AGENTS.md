@@ -4,7 +4,7 @@
 
 Antes de implementar una historia de usuario (HU), leer [docs/project-context.md](docs/project-context.md). Contiene el mapa del código, las decisiones del producto, la integración con admin y los límites conocidos.
 
-Este repositorio es la app móvil de fidelización de LoyLoop. El panel admin y el backend de reclamos están en `../LoyLoop`, un repositorio independiente. Ambos usan el mismo proyecto Supabase. Revisar el estado actual del código y de Git: los documentos históricos no son evidencia de que una funcionalidad esté terminada o desplegada.
+Esta carpeta contiene la app móvil de fidelización de LoyLoop dentro del repositorio compartido. El panel admin y el backend de reclamos Next.js están en la raíz (`..`); la base Django está en `../backend`. Usan el mismo proyecto Supabase cuando las variables locales/de despliegue están configuradas para ello. Revisar el estado actual del código y de Git: los documentos históricos no son evidencia de que una funcionalidad esté terminada o desplegada.
 
 ## Expo HAS CHANGED
 

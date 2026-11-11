@@ -8,3 +8,12 @@ node_modules/
 .env*
 .env*.local
 dev-server.log
+
+# Local Django and visual verification artifacts
+/backend/.venv/
+/backend/**/__pycache__/
+/backend/*.sqlite3
+/backend/.coverage
+.design-reference/
+test-results/
+playwright-report/
