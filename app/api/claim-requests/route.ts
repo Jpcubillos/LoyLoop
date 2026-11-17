@@ -1,60 +1,16 @@
-import { NextResponse } from "next/server";
-import { createClaimRequest, type ClaimAction } from "@/lib/claims";
+import { NextResponse } from 'next/server';
+import { BackendError } from '@/lib/backend/server';
+import { createClaimRequest } from '@/lib/claims';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
-};
-
-function getErrorMessage(error: unknown) {
-  const raw = error instanceof Error ? error.message : JSON.stringify(error);
-
-  if (raw.includes("ENOTFOUND") || raw.includes("fetch failed")) {
-    return "No se pudo conectar con Supabase. Revisa NEXT_PUBLIC_SUPABASE_URL en .env.local.";
-  }
-
-  return raw || "Could not create claim request.";
-}
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders
-  });
-}
-
-export async function POST(request: Request) {
+export async function POST(request:Request) {
+  const authorization=request.headers.get('authorization');
+  const bearer=authorization?.startsWith('Bearer ')?authorization.slice(7):undefined;
+  if(!bearer && request.headers.get('origin')!==new URL(request.url).origin) return NextResponse.json({ok:false},{status:403});
   try {
-    const body = await request.json();
-    const actionType = body.actionType as ClaimAction;
-
-    if (!actionType) {
-      return NextResponse.json(
-        { ok: false, message: "Missing actionType." },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    const claim = await createClaimRequest({
-      actionType,
-      businessSlug: body.businessSlug ?? "cafe-central",
-      customerEmail: typeof body.customerEmail === "string" ? body.customerEmail : undefined,
-      payload: body.payload ?? {}
-    });
-
-    return NextResponse.json(
-      {
-        ok: true,
-        code: claim.code,
-        expiresAt: claim.expires_at
-      },
-      { headers: corsHeaders }
-    );
-  } catch (error) {
-    return NextResponse.json(
-      { ok: false, message: getErrorMessage(error) },
-      { status: 500, headers: corsHeaders }
-    );
+    const body=await request.json();
+    const result=await createClaimRequest({actionType:body.actionType,businessSlug:body.businessSlug,payload:body.payload??{}},bearer);
+    return NextResponse.json(result,{headers:{'Cache-Control':'no-store'}});
+  } catch(error) {
+    return NextResponse.json({ok:false,message:'No pudimos completar la accion.'},{status:error instanceof BackendError?error.status:400});
   }
 }

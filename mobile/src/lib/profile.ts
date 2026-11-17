@@ -1,3 +1,4 @@
+import { businessApi } from "./business-api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { isDemo } from "@/lib/loyloop-data";
@@ -29,11 +30,8 @@ export async function requestEmailChange(email: string) {
     throw new Error(
       "Inicia sesión con una cuenta real para verificar un correo.",
     );
-  const readiness = await supabase.rpc("loyloop_mobile_profile_ready");
-  if (readiness.error || readiness.data !== true)
-    throw new Error(
-      "El cambio de correo estará disponible cuando se complete la actualización del servicio.",
-    );
+  const readiness=await businessApi<{ready:boolean}>("/account/readiness/");
+  if(!readiness.ready) throw new Error("El servicio de perfil se esta actualizando. Intenta mas tarde.");
   const { error } = await supabase.auth.updateUser({
     email: email.trim().toLowerCase(),
   });
@@ -94,20 +92,12 @@ export async function deleteAccount() {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error("Inicia sesión para eliminar tu cuenta.");
-  const eligibility = await supabase.rpc("check_loyloop_account_deletion");
-  if (eligibility.error)
-    throw new Error(
-      "No se puede eliminar esta cuenta todavía. Verifica tu correo o contacta al soporte si administras un comercio.",
-    );
+  await businessApi("/account/deletion-check/", "POST", {});
   const { error: storageError } = await supabase.storage
     .from("avatars")
     .remove([`${session.user.id}/avatar.jpg`]);
   if (storageError && session.user.user_metadata.avatar_url)
     throw new Error("No pudimos eliminar tu avatar. Inténtalo de nuevo.");
-  const { error } = await supabase.rpc("delete_loyloop_account");
-  if (error)
-    throw new Error(
-      "No pudimos eliminar tu cuenta. Intenta de nuevo o contacta al soporte de LoyLoop.",
-    );
+  await businessApi("/account/", "DELETE");
   await supabase.auth.signOut({ scope: "local" });
 }

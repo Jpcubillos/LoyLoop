@@ -1,11 +1,12 @@
 "use client";
+import { syncBackendSession, backendClient } from "@/lib/backend/client";
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Building2, Store, UserRound } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
-const db = supabase as any;
+
 
 type AuthMode = "client" | "team" | "business";
 
@@ -25,89 +26,11 @@ export function AuthForm() {
   const [feedback, setFeedback] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function ensureCustomerProfile(userEmail: string) {
-    const cleanEmail = userEmail.trim().toLowerCase();
-    const defaultName = cleanEmail.split("@")[0]?.replace(/[._-]/g, " ") || "Cliente LoyLoop";
+  async function ensureCustomerProfile(_userEmail: string) { await backendClient("/customer-identity/", "POST", {}); }
 
-    const { data: existingCustomer, error: customerLookupError } = await db
-      .from("customer_profiles")
-      .select("id")
-      .eq("email", cleanEmail)
-      .maybeSingle();
+  async function getAppUser(_userEmail: string) { return backendClient<{active:boolean;account_type:string|null;business_role:string|null}>("/session/"); }
 
-    if (customerLookupError) throw customerLookupError;
 
-    const customer = existingCustomer
-      ? existingCustomer
-      : (await db
-          .from("customer_profiles")
-          .insert({
-            full_name: defaultName,
-            email: cleanEmail
-          })
-          .select("id")
-          .single()).data;
-
-    if (!customer?.id) throw new Error("No se pudo crear el perfil del cliente.");
-
-    const { error: appUserError } = await db.from("app_users").upsert({
-      email: cleanEmail,
-      full_name: defaultName,
-      account_type: "customer",
-      business_id: null,
-      customer_id: customer.id,
-      business_role: null,
-      customer_segment: null,
-      active: true
-    }, { onConflict: "email" });
-
-    if (appUserError) throw appUserError;
-  }
-
-  async function getAppUser(userEmail: string) {
-    const { data, error } = await db
-      .from("app_users")
-      .select("account_type, business_role, active")
-      .eq("email", userEmail.trim().toLowerCase())
-      .maybeSingle();
-
-    if (error) throw error;
-    return data;
-  }
-
-  async function ensureDemoTeamUser(userEmail: string) {
-    const cleanEmail = userEmail.trim().toLowerCase();
-    const demoTeamUsers: Record<string, { fullName: string; role: "owner" | "manager" | "cashier" }> = {
-      "owner@loyloop.app": { fullName: "Dueno Cafe Central", role: "owner" },
-      "admin@loyloop.app": { fullName: "Admin Cafe Central", role: "manager" },
-      "cajero@loyloop.app": { fullName: "Cajero Cafe Central", role: "cashier" }
-    };
-    const demoUser = demoTeamUsers[cleanEmail];
-
-    if (!demoUser) return;
-
-    const { data: business, error: businessError } = await db
-      .from("businesses")
-      .select("id")
-      .eq("slug", "cafe-central")
-      .maybeSingle();
-
-    if (businessError) throw businessError;
-    if (!business?.id) throw new Error("No se encontro Cafe Central en la base de datos.");
-
-    const { error: appUserError } = await db.from("app_users").upsert({
-      email: cleanEmail,
-      full_name: demoUser.fullName,
-      account_type: "business",
-      business_id: business.id,
-      customer_id: null,
-      business_role: demoUser.role,
-      customer_segment: null,
-      active: true
-    }, { onConflict: "email" });
-
-    if (appUserError) throw appUserError;
-  }
 
   async function submitAuth() {
     setLoading(true);
@@ -124,13 +47,15 @@ export function AuthForm() {
       return;
     }
 
+    if (!result.data.session) {
+      setFeedback("Confirma tu correo antes de iniciar sesion.");
+      setLoading(false);
+      return;
+    }
     try {
+      await syncBackendSession(result.data.session.access_token);
       if (mode === "client") {
         await ensureCustomerProfile(cleanEmail);
-      }
-
-      if (mode === "team") {
-        await ensureDemoTeamUser(cleanEmail);
       }
 
       const appUser = await getAppUser(cleanEmail);
@@ -159,7 +84,7 @@ export function AuthForm() {
       const next = searchParams.get("next");
       const fallbackPath = appUser.account_type === "business" ? "/dashboard" : "/c";
       setFeedback(clientAuthMode === "signup" && mode === "client" ? "Cuenta creada." : "Sesion iniciada.");
-      router.push(next || fallbackPath);
+      router.push(next?.startsWith("/") && !next.startsWith("//") ? next : fallbackPath);
       router.refresh();
     } catch (error) {
       await supabase.auth.signOut();
@@ -173,7 +98,7 @@ export function AuthForm() {
     setLoading(true);
     setFeedback("");
 
-    const { error } = await db.from("business_leads").insert({
+    const values = {
       owner_name: ownerName,
       business_name: businessName,
       email,
@@ -181,7 +106,11 @@ export function AuthForm() {
       city,
       category,
       message: leadMessage
-    });
+    };
+    let error: {message:string}|null = null;
+    try {
+      await backendClient("/business-leads/", "POST", values);
+    } catch { error = {message:"No pudimos enviar la solicitud. Intenta mas tarde."}; }
 
     setLoading(false);
 

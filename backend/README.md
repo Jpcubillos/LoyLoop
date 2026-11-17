@@ -1,3 +1,5 @@
+> Estado vigente LL-235: PostgreSQL Supabase conectado, esquema adoptado y API Docker activada. El bootstrap SQLite/dummy descrito debajo corresponde a perfiles independientes de LL-232. Para negocio usar PostgreSQL/Docker: [POSTGRES.md](POSTGRES.md) y [evidencia LL-235](../mobile/docs/hus/LL-235.md).
+
 # LoyLoop Django API — LL-232
 
 Base independiente de Django 5.2 LTS y Django REST Framework. La única ruta pública es `GET /health/`: devuelve `{"status":"ok"}` y comprueba que el proceso HTTP responde. Es una prueba de **vida**, no comprueba PostgreSQL, Supabase Auth ni servicios externos.
@@ -58,3 +60,11 @@ python scripts/check_deploy.py
 ```
 
 Las pruebas aíslan el entorno, crean claves temporales en memoria y comprueban health, CORS, hosts, errores de configuración y opciones de TLS/seguridad. El smoke inicia y cierra un servidor local en un puerto libre. `check_deploy.py` ejecuta `manage.py check --deploy --fail-level WARNING` con configuración ficticia, sin desplegar ni acceder a Supabase. GitHub Actions ejecuta estos comandos en Python 3.11 y 3.12 con `.github/workflows/django-backend.yml`.
+
+## PostgreSQL (LL-235)
+
+Los perfiles PostgreSQL y el procedimiento de adopcion del esquema estan en [POSTGRES.md](POSTGRES.md). La base de pruebas existente tiene ocho migraciones aplicadas, API activada y escrituras directas de clientes revocadas.
+
+## Docker local
+
+Instrucciones y limites: [DOCKER.md](DOCKER.md). Usar `python scripts/docker.py up` desde backend. HTTPS local en https://localhost:8443/health/; `/ready/` verifica conexion y migraciones.

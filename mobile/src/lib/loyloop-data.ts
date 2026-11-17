@@ -1,3 +1,4 @@
+import { businessApi } from "./business-api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { canClaimOffer, type OfferKind } from "@/lib/loyalty-rules";
@@ -285,19 +286,7 @@ export async function joinBusiness(business: BusinessSummary) {
     );
     return;
   }
-  const id = await customerId();
-  if (!id) throw new Error("Inicia sesión para unirte a este comercio.");
-  const { error } = await supabase.from("business_memberships").upsert(
-    {
-      customer_id: id,
-      business_id: business.id,
-      points_balance: 0,
-      credit_balance_cents: 0,
-      tier: "Miembro",
-    },
-    { onConflict: "business_id,customer_id", ignoreDuplicates: true },
-  );
-  if (error) throw error;
+  await businessApi(`/memberships/${business.id}/`, "POST", {});
 }
 function demoDetail(b: BusinessSummary): BusinessDetail {
   const currentStamps = b.isMember ? (b.slug === "cafe-central" ? 7 : 4) : 0;

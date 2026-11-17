@@ -1,0 +1,23 @@
+# Whitelist: credentials, certificates, backups and local environments never
+# enter the Docker build context, including in remote builders.
+**
+!Dockerfile
+!.dockerignore
+!requirements.txt
+!requirements-docker.txt
+!gunicorn.conf.py
+!manage.py
+!config/
+!config/**
+!loyalty/
+!loyalty/**
+!scripts/
+!scripts/**
+!tests/
+!tests/**
+**/__pycache__/
+**/*.pyc
+**/.env*
+**/*.crt
+**/*.pem
+**/*.sqlite3

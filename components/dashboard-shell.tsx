@@ -1,4 +1,5 @@
 "use client";
+import { usesDjango, syncBackendSession, backendClient } from "@/lib/backend/client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -53,6 +54,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   async function signOut() {
+    await syncBackendSession(null);
     await supabase.auth.signOut();
     window.location.href = "/login";
   }

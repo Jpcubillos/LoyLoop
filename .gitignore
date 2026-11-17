@@ -17,3 +17,11 @@ dev-server.log
 .design-reference/
 test-results/
 playwright-report/
+
+/backend/supabase-ca.crt
+
+/backend/.docker/
+
+# Track safe templates only, never local secrets.
+!**/.env.example
+*.tsbuildinfo

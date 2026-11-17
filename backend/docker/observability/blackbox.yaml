@@ -1,0 +1,9 @@
+modules:
+  http_loyloop:
+    prober: http
+    timeout: 4s
+    http:
+      valid_status_codes: [200]
+      preferred_ip_protocol: ip4
+      tls_config:
+        ca_file: /run/secrets/staging_ca

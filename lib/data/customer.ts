@@ -1,3 +1,4 @@
+import { usesDjango, pageRequest as backendRequest } from "@/lib/backend/server";
 import { supabase } from "@/lib/supabase/client";
 
 const db = supabase as any;
@@ -141,20 +142,25 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     ]
   };
 
+  if (usesDjango) Object.assign(fallback,{points:0,creditCents:0,tier:"Sin membresia",currentStamps:0,requiredStamps:10,availableCampaigns:[],availableRewards:[],availableMissions:[],history:[]});
+  const identity=usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}) : null;
+
   const { data: business, error: businessError } = await db
     .from("businesses")
     .select("id, vip_purchase_threshold, at_risk_days, inactive_days")
     .eq("slug", "cafe-central")
     .maybeSingle();
 
+  if (usesDjango && businessError) throw new Error("No pudimos cargar el comercio.");
   if (businessError || !business) return fallback;
 
   const { data: customer, error: customerError } = await db
     .from("customer_profiles")
     .select("id")
-    .eq("email", "juan@loyloop.app")
+    .eq(identity ? "id" : "email", identity?.customer_id ?? "juan@loyloop.app")
     .maybeSingle();
 
+  if (usesDjango && customerError) throw new Error("No pudimos cargar tu perfil.");
   if (customerError || !customer) return fallback;
 
   const { data: membership } = await db
@@ -217,6 +223,7 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     : { data: [] };
 
   const redeemedCampaignIds = new Set(redemptions?.map((item: any) => item.campaign_id) ?? []);
+  if (usesDjango && campaignsError) throw new Error("No pudimos cargar las ofertas.");
   const availableCampaigns = campaignsError
     ? fallback.availableCampaigns
     : (campaigns ?? [])
@@ -244,6 +251,7 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     .eq("active", true)
     .order("created_at", { ascending: false });
 
+  if (usesDjango && missionsError) throw new Error("No pudimos cargar las ofertas.");
   const availableMissions = missionsError
     ? fallback.availableMissions
     : (missions ?? [])
@@ -276,6 +284,7 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     .eq("active", true)
     .order("created_at", { ascending: false });
 
+  if (usesDjango && rewardsError) throw new Error("No pudimos cargar las ofertas.");
   const availableRewards = rewardsError
     ? fallback.availableRewards
     : (rewards ?? [])

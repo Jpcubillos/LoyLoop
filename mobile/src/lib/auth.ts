@@ -1,3 +1,4 @@
+import { currentCustomerId } from "./customer-identity";
 import { supabase } from "@/lib/supabase";
 import { isSupabaseConfigured, recoveryAuth } from "@/lib/supabase";
 import { createCustomerAuth } from "@/lib/auth-service";
@@ -6,6 +7,7 @@ const customerAuth = createCustomerAuth(
   supabase,
   isSupabaseConfigured,
   recoveryAuth,
+  currentCustomerId,
 );
 export const signInWithEmail = customerAuth.signIn;
 export const signUpWithEmail = customerAuth.signUp;

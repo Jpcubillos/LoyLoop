@@ -27,6 +27,65 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r requirements.txt
+      - run: python -m pip check
       - run: python -m unittest discover -s tests -v
       - run: python scripts/smoke_http.py
       - run: python scripts/check_deploy.py
+      - name: Check local migration consistency
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.local
+        run: |
+          export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput
+          python manage.py migrate --check
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: isolated-ll235-only
+          POSTGRES_DB: loyloop_ll235
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      LL235_ISOLATED_DATABASE: 'yes'
+      DB_PORT: '5432'
+      DB_PASSWORD: isolated-ll235-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip check
+      - run: python scripts/test_postgres.py
+      - run: python scripts/test_api.py
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Django image
+        run: docker build --tag loyloop-django:ci backend
+      - name: Verify image runtime and absence of local secrets
+        run: >-
+          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m
+          loyloop-django:ci python -c
+          "import os,pathlib; assert os.getuid()==10001; p=pathlib.Path('/app'); assert not list(p.rglob('.env*')); assert not list(p.rglob('*.crt')); assert not list(p.rglob('*.sqlite3'))"
+      - name: Test in Linux container
+        run: >-
+          docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m
+          loyloop-django:ci python -m unittest discover -s tests -v

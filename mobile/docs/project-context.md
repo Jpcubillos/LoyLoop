@@ -1,6 +1,6 @@
 # Contexto vigente de LoyLoop
 
-Actualizado: 2026-11-08. Base para implementar historias de usuario sobre la app existente.
+Actualizado: 2026-11-16. Base para implementar historias de usuario sobre la app existente.
 
 ## Producto
 
@@ -14,12 +14,12 @@ El cliente descubre comercios, se inscribe, participa en misiones/visitas/compra
 | --- | --- | --- |
 | Móvil | `mobile/` en el repositorio `LoyLoop` | Expo SDK 57, React Native, TypeScript, Expo Router, Supabase |
 | Admin/backend | Raíz del repositorio | Panel web, acciones de ofertas, validación de reclamos, esquema SQL y aprobación de comercios |
-| Django API (base local) | `backend/` en la raíz | Bootstrap independiente LL-232; todavía sin conexión a PostgreSQL ni endpoints de negocio |
+| Django API (base local) | `backend/` en la raíz | Django/DRF, PostgreSQL Supabase, API de negocio y migraciones LL-235 |
 | Base de datos | Supabase compartido | Comercios, perfiles, membresías, ofertas, progreso y reclamos |
 
 El repositorio integrado usa `Jpcubillos/LoyLoop`; el historial anterior de `Jpcubillos/LoyLoopMobile` se preserva en la integración. Los despliegues web, móvil y Django siguen siendo independientes. El proyecto Supabase configurado anteriormente es `phvuowulzkrttgcfnvly`; verificar siempre el entorno antes de ejecutar SQL.
 
-La decisión objetivo de la épica Jira **LL-231** es Django/DRF como API y dueño de la lógica/esquema de negocio, PostgreSQL alojado en Supabase y Supabase Auth para identidad. La migración es progresiva: en el estado actual, móvil y admin todavía usan las integraciones existentes descritas abajo; el bootstrap Django de LL-232 no las reemplaza ni se conecta todavía a Supabase. LL-235 cubre la conexión y gestión del esquema PostgreSQL. No presentar la arquitectura objetivo como ya desplegada.
+La arquitectura de LL-231 tiene su conexión y corte LL-235 aplicado al proyecto de pruebas existente: Django gestiona esquema y escrituras de negocio; Supabase aloja PostgreSQL, Auth y Storage. Ocho migraciones aplicadas; rol runtime mínimo separado del propietario; clientes sin escritura directa/RPC de negocio. El catálogo conserva lecturas Supabase. Docker local y el túnel temporal no actualizan el admin publicado: cada cliente requiere su despliegue/configuración. Evidencia: [LL-235](hus/LL-235.md).
 
 ## Mapa del código móvil
 
@@ -39,7 +39,7 @@ La decisión objetivo de la épica Jira **LL-231** es Django/DRF como API y due�
 | `src/lib/claims.ts`, `claim-status.ts` | Contrato y estados de reclamos |
 | `src/lib/profile.ts`, `auth.ts`, `supabase.ts` | Perfil, autenticación y cliente Supabase |
 | `src/lib/auth-service.ts`, `auth-rules.ts` | Registro, confirmación, acceso y recuperación por OTP; mensajes seguros |
-| `src/lib/customer-identity.ts` | Perfil propio mediante RPC de identidad verificada |
+| `src/lib/customer-identity.ts` | Perfil propio mediante API Django autenticada |
 | `src/lib/secure-session-storage.ts`, `src/components/SessionLifecycle.tsx` | Sesión nativa en SecureStore y renovación en primer plano |
 | `src/hooks/use-resource.ts` | Carga, error y recarga al enfocar; evita respuestas obsoletas |
 | `src/components/ui/loyloop.tsx` | Primitivas del sistema visual |
@@ -66,13 +66,13 @@ Tablas relevantes: `businesses`, `business_leads`, `customer_profiles`, `app_use
 - Móvil consulta datos reales y aplica disponibilidad, estado activo, fechas y segmento cuando corresponda. No introducir valores de fidelidad ficticios para cuentas reales.
 - `useResource` vuelve a consultar al enfocar la pantalla. No hay sincronización Realtime ni garantía de actualización en segundo plano.
 - El catálogo móvil lee `businesses`; el registro público de un comercio crea una solicitud en `business_leads`.
-- En admin, `/dashboard/solicitudes` permite a una cuenta autorizada usar «Aprobar y publicar». La RPC `approve_business_lead` crea el comercio y vincula la solicitud mediante `business_id`; repetir la aprobación no debe duplicarlo.
-- La autorización para publicar se guarda en `platform_business_approvers`. La RPC comprueba la cuenta autenticada. Ser dueño de un comercio no implica autorización global para aprobar otros.
-- Crear un comercio no acredita por sí solo que exista un panel multiempresa completo ni que la cuenta del solicitante haya sido aprovisionada. Revisar la selección de `business_id` del admin antes de una HU multiempresa: parte de la implementación conserva Café Central como comercio objetivo.
+- En admin, `/dashboard/solicitudes` permite a una cuenta autorizada usar «Aprobar y publicar». Django aprueba y vincula el comercio de forma idempotente; la RPC histórica ya no permite escritura de clientes.
+- La autorización para publicar se guarda en `platform_business_approvers`. Django comprueba UUID Auth y autorización global. Ser dueño de un comercio no implica autorización global para aprobar otros.
+- Crear un comercio no acredita por sí solo que exista un panel multiempresa completo ni que la cuenta del solicitante haya sido aprovisionada. Revisar la selección de `business_id` del admin antes de una HU multiempresa: Django resuelve el comercio autorizado desde la cuenta; no conceder permisos mediante un slug fijo.
 
 ## Estado confirmado y pendientes
 
-LL-232/LL-233/LL-234: se añadió en `backend/` un bootstrap Django/DRF independiente con settings local/producción, variables explícitas para clave, hosts, CORS y TLS, `GET /health/` de vida, pruebas y workflow de CI. El healthcheck no comprueba la base de datos. SQLite se usa solo en local; producción usa un motor dummy hasta LL-235. No hay endpoints de negocio, verificación JWT, despliegue ni conexión real a Supabase en esta entrega. Detalles y evidencia: [LL-232](hus/LL-232.md) y [README del backend](../../backend/README.md).
+LL-232 aportó el bootstrap seguro. LL-235 añade conexión PostgreSQL/TLS/pooling, ocho migraciones de adopción, rol mínimo, API autenticada y consumidores sin escritura directa. Adopción remota verificada preservando datos, restore aislado de 51 tablas y CRUD con Auth real por HTTPS local. Ver [LL-235](hus/LL-235.md). LL-244 conserva su alcance separado de CI/observabilidad/despliegue/recuperación; no se declara cerrada por estas comprobaciones.
 
 LL-11 (LL-39 y LL-40) tiene implementación local de registro, confirmación por código, acceso/cierre y recuperación por código. La identidad nueva se vincula por `auth.users.id` a través de `customer_identities` y `ensure_loyloop_customer_identity`, sin recrear perfiles históricos. La recuperación usa un cliente sin persistencia; la sesión normal nativa se guarda en SecureStore. Las consultas limpian datos al reenfocar o cambiar de cuenta y el modo demo ahora requiere activación explícita.
 
@@ -126,3 +126,9 @@ La demo requiere `EXPO_PUBLIC_DEMO_MODE=true`; para cuentas reales usar `false`.
 Seguir la política de pruebas y criterios de terminado de `AGENTS.md`. Registrar cada HU en `docs/hus/<id>.md`: identificación y objetivo, criterios de aceptación recibidos, pantallas/datos/permisos afectados, decisiones, cambios necesarios en ambos repos o SQL, comprobaciones reproducibles, entorno, resultados y pendientes. Distinguir pruebas simuladas, integración real, revisión visual y comprobaciones nativas. No marcar «aplicado», «desplegado» o «verificado» sin evidencia.
 
 Este archivo reúne decisiones vigentes y límites conocidos. Los planes y especificaciones bajo `docs/superpowers/` conservan su carácter histórico; pueden describir un alcance anterior o tareas sin marcar aunque el código haya cambiado.
+
+## LL-235 y Docker — estado confirmado 2026-11-16
+
+Django Docker ya opera sobre la base Supabase existente. Ocho migraciones aplicadas sin alterar valores originales; escrituras/RPC de negocio revocadas a clientes y consumidores migrados a API. HTTPS local y health/readiness públicos correctos; Auth real y CRUD de oferta inactiva verificados por HTTPS local. Pool remoto: 60 consultas concurrentes sin préstamos pendientes. Respaldo/restore aislado de public/auth/storage: 51 tablas coinciden por SHA-256. Secretos y artefactos privados en backend/.docker, fuera de Git. Ver [LL-235](hus/LL-235.md), [POSTGRES.md](../../backend/POSTGRES.md) y [DOCKER.md](../../backend/DOCKER.md).
+
+El túnel temporal cambia de URL y necesita PC/Docker encendidos. El admin publicado y el dispositivo requieren sus propias configuraciones/despliegues; no se declara probado el recorrido autenticado por Cloudflare ni el dispositivo físico. LL-244 y Jira permanecen separados de la evidencia técnica local/remota de LL-235.

@@ -6,26 +6,24 @@ import {
   validateEmail,
   validateNewPassword,
 } from "./auth-rules";
-type AuthClient = Pick<SupabaseClient, "auth" | "rpc">;
+type AuthClient = Pick<SupabaseClient, "auth">;
 
 export function createCustomerAuth(
   client: AuthClient,
   configured: boolean,
   recoveryAuth = client.auth,
+  bootstrapIdentity?: () => Promise<string | null>,
 ) {
   function requireService() {
     if (!configured)
       throw new Error("El acceso no está disponible. Inténtalo más tarde.");
   }
   async function prepareIdentity() {
-    const { data, error } = await client.rpc(
-      "ensure_loyloop_customer_identity",
-    );
-    if (error || typeof data !== "string") {
+    try {
+      if (!bootstrapIdentity || !await bootstrapIdentity()) throw new Error("Missing backend identity");
+    } catch {
       await client.auth.signOut({ scope: "local" });
-      throw new Error(
-        "No pudimos preparar tu perfil. Inténtalo más tarde o contacta con soporte.",
-      );
+      throw new Error("No pudimos preparar tu perfil. Intenta mas tarde o contacta con soporte.");
     }
   }
   return {

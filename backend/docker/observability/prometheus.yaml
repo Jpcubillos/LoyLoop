@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+rule_files: [/etc/prometheus/alerts.yaml]
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+scrape_configs:
+  - job_name: loyloop-django
+    scheme: https
+    metrics_path: /internal/metrics/
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics_token
+    tls_config:
+      ca_file: /run/secrets/staging_ca
+    static_configs:
+      - targets: [proxy:443]
+  - job_name: loyloop-probes
+    metrics_path: /probe
+    params:
+      module: [http_loyloop]
+    static_configs:
+      - targets: ["https://proxy/health/", "https://proxy/ready/"]
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox:9115

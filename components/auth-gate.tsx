@@ -1,11 +1,12 @@
 "use client";
+import { syncBackendSession, backendClient } from "@/lib/backend/client";
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
-const db = supabase as any;
+
 
 type AccountType = "business" | "customer";
 type BusinessRole = "owner" | "manager" | "cashier";
@@ -17,26 +18,7 @@ type AppUser = {
   active: boolean;
 };
 
-const businessAccess: Record<BusinessRole, string[]> = {
-  owner: ["/dashboard"],
-  manager: [
-    "/dashboard",
-    "/dashboard/clientes",
-    "/dashboard/recompensas",
-    "/dashboard/misiones",
-    "/dashboard/campanas",
-    "/dashboard/validar",
-    "/dashboard/qr",
-    "/dashboard/analiticas"
-  ],
-  cashier: ["/dashboard", "/dashboard/validar", "/dashboard/qr"]
-};
-
-function canAccessDashboard(pathname: string, role: BusinessRole | null) {
-  if (!role) return false;
-  const allowedPaths = businessAccess[role] ?? [];
-  return allowedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
-}
+import { canAccessDashboard } from "@/lib/auth-access";
 
 export function AuthGate({
   children,
@@ -61,15 +43,18 @@ export function AuthGate({
       const userEmail = sessionData.session?.user.email?.toLowerCase();
 
       if (!userEmail) {
+        await syncBackendSession(null).catch(() => {});
         router.replace(`/login?next=${encodeURIComponent(pathname)}`);
         return;
       }
 
-      const { data: appUser, error } = await db
-        .from("app_users")
-        .select("email, account_type, business_role, active")
-        .eq("email", userEmail)
-        .maybeSingle();
+      let appUser: AppUser | null = null;
+      let error: unknown = null;
+      try {
+        await syncBackendSession(sessionData.session!.access_token);
+        const session = await backendClient<{email:string;active:boolean;account_type:AccountType|null;business_role:BusinessRole|null}>("/session/");
+        if (session.account_type) appUser = {...session,account_type:session.account_type};
+      } catch (failure) { error = failure; }
 
       if (!mounted) return;
 

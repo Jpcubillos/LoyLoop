@@ -65,6 +65,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 INSTALLED_APPS = ["django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "corsheaders", "rest_framework"]
 MIDDLEWARE = [
+    "config.telemetry.TelemetryMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -86,3 +87,19 @@ SECURE_REFERRER_POLICY = "same-origin"
 USE_TZ = True
 TIME_ZONE = "America/Bogota"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+BUSINESS_API_ENABLED = env_bool("DJANGO_BUSINESS_API_ENABLED", False)
+
+# The audit logger accepts JSON events from config.audit only; generic Django
+# error logs keep their existing handling and are not treated as audit events.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"safe_error": {"class":"logging.StreamHandler","formatter":"safe_error"}, "audit_console": {"class": "logging.StreamHandler", "formatter": "message"}},
+    "formatters": {"safe_error":{"()":"config.telemetry.SafeErrorFormatter"},"message": {"format": "%(message)s"}},
+    "loggers": {
+        "django.request":{"handlers":["safe_error"],"level":"WARNING","propagate":False},
+        "django.security":{"handlers":["safe_error"],"level":"WARNING","propagate":False},
+        "django.server":{"handlers":["safe_error"],"level":"WARNING","propagate":False},
+        "loyloop.alerts":{"handlers":["audit_console"],"level":"INFO","propagate":False},
+        "loyloop.http":{"handlers":["audit_console"],"level":"INFO","propagate":False},"loyloop.audit": {"handlers": ["audit_console"], "level": "INFO", "propagate": False}},
+}

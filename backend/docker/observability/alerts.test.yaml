@@ -1,0 +1,20 @@
+rule_files: [alerts.yaml]
+evaluation_interval: 5s
+tests:
+  - interval: 5s
+    input_series:
+      - series: 'probe_success{job="loyloop-probes",instance="https://proxy/ready/"}'
+        values: '1 1 0+0x20'
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: LoyLoopReadinessDown
+        exp_alerts: []
+      - eval_time: 45s
+        alertname: LoyLoopReadinessDown
+        exp_alerts:
+          - exp_labels:
+              job: loyloop-probes
+              instance: https://proxy/ready/
+              severity: critical
+            exp_annotations:
+              summary: Django cannot serve database-backed operations

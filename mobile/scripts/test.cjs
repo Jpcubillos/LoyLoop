@@ -2,3 +2,5 @@
 require("./loyalty.test.cjs");
 require("./auth.test.cjs");
 require("./customer-identity.test.cjs");
+
+require("./business-api.test.cjs");

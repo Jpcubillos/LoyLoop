@@ -1,0 +1,83 @@
+name: loyloop-staging
+services:
+  database:
+    image: postgres:17@sha256:0d938e975177bef9f1f61f3f9dbcf2e0aa0a139568f66d3415ed8892eb97f6ac
+    network_mode: none
+    environment:
+      POSTGRES_DB: loyloop_restore
+      POSTGRES_PASSWORD_FILE: /run/secrets/staging_db_password
+      POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+    secrets: [staging_db_password]
+    volumes:
+      - staging_data:/var/lib/postgresql/data
+      - staging_socket:/var/run/postgresql
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -d, loyloop_restore]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  api:
+    image: loyloop-django:staging
+    platform: linux/amd64
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.staging
+      DATABASE_CONFIG_FILE: /run/secrets/staging_env
+    entrypoint: [python, scripts/staging_entry.py]
+    secrets: [staging_env]
+    volumes:
+      - staging_socket:/run/pgsocket:ro
+    networks: [staging]
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      database:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+    healthcheck:
+      test: [CMD, python, scripts/container_health.py]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  proxy:
+    image: caddy:2-alpine@sha256:fc9cbc100585871d18d4e451cca7021785c90a7006087427ae5ceb3e4efe6424
+    platform: linux/amd64
+    ports: [127.0.0.1:8444:443]
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - staging_proxy:/data
+      - staging_proxy_config:/config
+    networks: [staging]
+    depends_on:
+      api:
+        condition: service_healthy
+  tunnel:
+    profiles: [public]
+    image: cloudflare/cloudflared:latest@sha256:bf723075c9a1a35e785bdcac0e8420f504e8074cc65784ed03300b8219aafadc
+    platform: linux/amd64
+    command: [tunnel, --no-autoupdate, --protocol, http2, --url, "https://proxy:443", --http-host-header, localhost, --origin-server-name, localhost, --origin-ca-pool, /run/secrets/staging_ca]
+    secrets: [staging_ca]
+    networks: [staging]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on: [proxy]
+networks:
+  staging:
+volumes:
+  staging_data:
+  staging_socket:
+  staging_proxy:
+  staging_proxy_config:
+secrets:
+  staging_db_password:
+    file: .docker/staging-db-password
+  staging_env:
+    file: .docker/staging.env
+  staging_ca:
+    file: .docker/staging-ca.crt
