@@ -46,3 +46,15 @@ test('Successful deletion accepts an empty 204 body', async () => {
   const api=createBusinessApi('https://backend.example',async()=> 'session',async()=>({ok:true,status:204,json:async()=>{throw new Error('Must not parse');}}));
   assert.equal(await api('/account/','DELETE'),undefined);
 });
+
+test("Anonymous discovery cannot become an anonymous write or private API read", async () => {
+  let calls=0;
+  const request=createBusinessApi("https://api.example.test",async()=>null,async(url,options)=>{
+    calls++;assert.equal(options.headers.Authorization,undefined);
+    return {ok:true,status:200,json:async()=>({catalog:[]})};
+  },true);
+  await request("/discovery/");assert.equal(calls,1);
+  await assert.rejects(request("/discovery/","POST",{}));
+  await assert.rejects(request("/customer-identity/"));
+  assert.equal(calls,1);
+});

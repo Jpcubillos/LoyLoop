@@ -3,6 +3,7 @@ export function createBusinessApi(
   baseUrl: string,
   token: () => Promise<string | null>,
   transport: typeof fetch = fetch,
+  publicDiscovery = false,
 ) {
   return async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     let base: URL;
@@ -13,13 +14,13 @@ export function createBusinessApi(
       throw new Error("La direccion del servicio de LoyLoop no es valida.");
     }
     const accessToken = await token();
-    if (!accessToken) throw new Error("Inicia sesion para continuar.");
+    if (!accessToken && !(publicDiscovery && method === "GET" && /^\/discovery\/(?:[a-zA-Z0-9_-]+\/)?$/.test(path))) throw new Error("Inicia sesion para continuar.");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await transport(`${base.origin}/api${path}`, {
         method, signal: controller.signal,
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json" },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       if (!response.ok) {

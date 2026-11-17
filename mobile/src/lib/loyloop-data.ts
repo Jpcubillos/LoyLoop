@@ -1,4 +1,5 @@
-import { businessApi } from "./business-api";
+import type { DiscoveryData, DiscoveryDetail } from "./discovery-types";
+import { businessApi, discoveryApi } from "./business-api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "@/lib/supabase";
 import { canClaimOffer, type OfferKind } from "@/lib/loyalty-rules";
@@ -186,53 +187,12 @@ export async function getBusinesses(): Promise<BusinessSummary[]> {
       isMember: b.isMember || joined.includes(b.slug),
     }));
   }
-  const [catalog, id] = await Promise.all([
-    supabase
-      .from("businesses")
-      .select(
-        "id, slug, name, category, description, address, logo_url, vip_purchase_threshold, at_risk_days, inactive_days",
-      )
-      .order("created_at", { ascending: false }),
-    customerId(),
-  ]);
-  if (catalog.error) throw catalog.error;
-  const businessIds = (catalog.data ?? []).map((business) => business.id);
-  const [memberships, activity, rewards, campaigns] = await Promise.all([
-    id && businessIds.length
-      ? supabase
-          .from("business_memberships")
-          .select("business_id, points_balance, tier")
-          .eq("customer_id", id)
-      : Promise.resolve({ data: [], error: null }),
-    id && businessIds.length
-      ? supabase
-          .from("loyalty_events")
-          .select("business_id, event_type, created_at")
-          .eq("customer_id", id)
-          .in("business_id", businessIds)
-          .in("event_type", ["purchase", "stamp", "minipay_payment"])
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [], error: null }),
-    businessIds.length
-      ? supabase
-          .from("rewards")
-          .select("business_id, name, created_at")
-          .in("business_id", businessIds)
-          .eq("active", true)
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [], error: null }),
-    businessIds.length
-      ? supabase
-          .from("campaigns")
-          .select("business_id, name, starts_at, ends_at, created_at")
-          .in("business_id", businessIds)
-          .eq("active", true)
-          .eq("status", "active")
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (memberships.error) throw memberships.error;
-  if (activity.error) throw activity.error;
+  const result = await discoveryApi<DiscoveryData>("/discovery/");
+  const catalog = { data: result.catalog };
+  const memberships = { data: result.memberships };
+  const activity = { data: result.activity };
+  const rewards = { data: result.rewards };
+  const campaigns = { data: result.campaigns };
   return (catalog.data ?? []).map((b) => {
     const preview = fallbackBusinesses.find((item) => item.slug === b.slug);
     const now = Date.now();
@@ -397,41 +357,12 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
   const business = (await getBusinesses()).find((b) => b.slug === slug);
   if (!business) throw new Error("No encontramos este comercio.");
   if (isDemo) return demoDetail(business);
-  const id = await customerId();
-  const [stamps, rewards, campaigns, missions, progress] = await Promise.all([
-    id
-      ? supabase
-          .from("stamp_cards")
-          .select("*")
-          .eq("business_id", business.id)
-          .eq("customer_id", id)
-          .eq("active", true)
-          .eq("reward_name", "Cafe gratis con 10 sellos")
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    supabase
-      .from("rewards")
-      .select("*")
-      .eq("business_id", business.id)
-      .eq("active", true),
-    supabase
-      .from("campaigns")
-      .select("*")
-      .eq("business_id", business.id)
-      .eq("active", true)
-      .in("status", ["active", "scheduled"]),
-    supabase
-      .from("missions")
-      .select("*")
-      .eq("business_id", business.id)
-      .eq("active", true),
-    id
-      ? supabase.from("customer_missions").select("*").eq("customer_id", id)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  for (const result of [stamps, rewards, campaigns, missions, progress])
-    if (result.error) throw result.error;
+  const result = await discoveryApi<DiscoveryDetail>(`/discovery/${slug}/`);
+  const stamps = { data: result.stamps };
+  const rewards = { data: result.rewards };
+  const campaigns = { data: result.campaigns };
+  const missions = { data: result.missions };
+  const progress = { data: result.progress };
   const base = {
     businessSlug: slug,
     businessName: business.name,

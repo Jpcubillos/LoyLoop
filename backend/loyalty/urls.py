@@ -1,3 +1,4 @@
+from .discovery_api import DiscoveryView
 from django.urls import path
 from .api import SessionView, CustomerIdentityView, OffersView
 
@@ -8,6 +9,8 @@ from .admin_api import PublicLeadView, LeadsView, SegmentationView, StaffView
 from .profile_api import AccountDeletionCheckView, AccountView, AccountReadinessView
 
 urlpatterns = [
+    path("discovery/",DiscoveryView.as_view()),
+    path("discovery/<slug:slug>/",DiscoveryView.as_view()),
     path("account/readiness/",AccountReadinessView.as_view()),
     path("account/deletion-check/",AccountDeletionCheckView.as_view()),
     path("account/",AccountView.as_view()),

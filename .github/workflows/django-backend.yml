@@ -39,6 +39,8 @@ jobs:
           python manage.py migrate --check
 
   postgres:
+    needs: [mobile-auth]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -61,6 +63,8 @@ jobs:
       DB_PORT: '5432'
       DB_PASSWORD: isolated-ll235-only
     steps:
+      - name: Require mobile authentication checks
+        run: test "${{ needs.mobile-auth.result }}" = "success"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
@@ -99,3 +103,34 @@ jobs:
           --workdir /rules
           prom/prometheus:v3.16.0@sha256:89c1a644817e9ad70fa2af76c84898e327c1de7063735f962e8313b1e28672c3
           test rules alerts.test.yaml
+
+  mobile-auth:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      EXPO_PUBLIC_SUPABASE_URL: https://test.supabase.co
+      EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: mocked-public-test-key
+      EXPO_PUBLIC_LOYLOOP_API_URL: https://api.example.test
+      EXPO_PUBLIC_DEMO_MODE: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - name: Auth UI contract (mocked provider and Django)
+        run: |
+          npx expo start --web --port 8091 > /tmp/loyloop-expo.log 2>&1 &
+          node scripts/auth-mobile-smoke.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ll11-auth-ui
+          path: mobile/.design-reference/qa/ll11

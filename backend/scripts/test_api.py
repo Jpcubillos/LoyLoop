@@ -113,6 +113,21 @@ def main():
     assert CustomerIdentity.objects.filter(auth_user_id=actors['customer'].id).count()==1
     assert AppUser.objects.filter(auth_user_id=actors['customer'].id).count()==1
     membership.refresh_from_db();assert membership.points_balance==180
+    # LL-11: visitor and account switching cannot expose another customer's progress.
+    own=client.get('/api/discovery/');assert own.status_code==200
+    assert any(row['points_balance']==180 for row in own.data['memberships'])
+    assert all('owner_user_id' not in row for row in own.data['catalog'])
+    detail=client.get('/api/discovery/api-fixture/');assert detail.status_code==200
+    client.force_authenticate(actors['other'])
+    foreign=client.get('/api/discovery/?customer_id='+str(profile.id))
+    assert foreign.status_code==200 and foreign.data['memberships']==[]
+    client=APIClient(HTTP_HOST='localhost')
+    public=client.get('/api/discovery/');assert public.status_code==200
+    assert public.data['memberships']==[] and public.data['activity']==[]
+    assert client.get('/api/discovery/api-fixture/').data['progress']==[]
+    assert client.post('/api/discovery/',{},format='json').status_code==405
+    print('Discovery/PG: own progress, ignored foreign identity, anonymous isolation and read-only contract passed.')
+
     client.force_authenticate(actors['owner'])
     assert client.delete(base+reward_id+'/').status_code==204
 

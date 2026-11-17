@@ -4,7 +4,14 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 
 async function main() {
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const readyDeadline=Date.now()+120000;
+  const testUrl=process.env.LOYLOOP_TEST_URL || "http://localhost:8091/login";
+  for (;;) {
+    try { if ((await fetch(testUrl)).ok) break; } catch {}
+    if(Date.now()>readyDeadline)throw new Error("Expo auth screen did not become ready");
+    await new Promise(resolve=>setTimeout(resolve,500));
+  }
+  const browser = await chromium.launch({ ...(process.env.CI ? {} : {channel: "chrome"}), headless: true });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -32,6 +39,13 @@ async function main() {
     token_type: "bearer",
     user,
   };
+  await page.route("**/api/**", async route => {
+    const request=route.request();const path=new URL(request.url()).pathname;
+    if(request.method()==="OPTIONS")return route.fulfill({status:204,headers:{"access-control-allow-origin":"*","access-control-allow-headers":"authorization,content-type","access-control-allow-methods":"GET,POST,OPTIONS"}});
+    const body=path==="/api/customer-identity/"?{customer_id:"10000000-0000-0000-0000-000000000001"}:path==="/api/discovery/"?{catalog:[],memberships:[],activity:[],rewards:[],campaigns:[]}:{};
+    assert.ok(request.headers().authorization || path==="/api/discovery/");
+    return route.fulfill({status:200,contentType:"application/json",headers:{"access-control-allow-origin":"*"},body:JSON.stringify(body)});
+  });
   await page.route("**/*.supabase.co/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -78,9 +92,7 @@ async function main() {
       if (request.method() === "PUT") passwordUpdates++;
       return json(user);
     }
-    if (path.endsWith("/rpc/ensure_loyloop_customer_identity"))
-      return json("10000000-0000-0000-0000-000000000001");
-    if (path.startsWith("/rest/")) return json([]);
+    if (path.includes("/rpc/") || path.startsWith("/rest/")) throw new Error("Unexpected direct business database access");
     return route.abort();
   });
   fs.mkdirSync(".design-reference/qa/ll11", { recursive: true });
