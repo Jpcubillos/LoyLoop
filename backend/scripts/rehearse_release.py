@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--archive',type=Path,required=True)
     parser.add_argument('--apply',action='store_true',required=True)
     parser.add_argument('--resolved-auth-address')
+    parser.add_argument('--skip-restore',action='store_true')
+    parser.add_argument('--inject-failure',choices=['migration','readiness'])
     args=parser.parse_args()
     archive=args.archive.resolve()
     if not archive.is_relative_to((ROOT/'.docker/backups').resolve()) or archive.name!='database.dump':
@@ -32,9 +34,12 @@ def main():
         raise RuntimeError('A recorded ready isolated staging deployment is required.')
     if stage.get('local_url')!='https://localhost:8444':
         raise RuntimeError('Only the local HTTPS staging origin is permitted.')
-    state_path=ROOT/'.docker/ll244-release-state.json'
-    if state_path.exists():
-        raise RuntimeError('A rehearsal already exists; inspect its private state before another run.')
+    run_id=uuid4().hex[:12]
+    state_path=ROOT/('.docker/ll244-release-'+run_id+'.json')
+    if stage.get('recovery_container'):
+        database=stage['recovery_container']
+        check=subprocess.run(['docker','inspect','--format','{{.HostConfig.NetworkMode}}',database],capture_output=True,text=True,check=True)
+        if check.stdout.strip()!='none':raise RuntimeError('The active recovered database must remain isolated.')
     diagnostic=ROOT/'.docker/ll244-release-private.log'
     def command(args,data=None):
         result=subprocess.run(args,cwd=ROOT,input=data,capture_output=True)
@@ -56,13 +61,18 @@ def main():
     tag='loyloop-django:ll244-'+revision[:12]
     command(['docker','build','--label','org.opencontainers.image.revision='+revision,'--tag',tag,str(ROOT)])
     new=command(['docker','image','inspect','--format','{{.Id}}',tag]).strip()
-    if new==old:raise RuntimeError('The release must differ from the existing staging image.')
+    # Redeploying the same immutable artifact is valid and must be repeatable.
     state.update(candidate_image=new,status='deploying');state_path.write_text(json.dumps(state,indent=2))
     override=ROOT/'.docker/ll244-release-override.json'
-    def compose(image,socket=None):
-        content={'services':{'api':{'image':image}}}
+    active_socket=stage.get('recovery_socket')
+    original_override=override.read_text() if override.exists() else None
+    def compose(image,socket=None,broken=False):
+        socket=socket or active_socket
+        content={'services':{'api':{'image':image},'maintenance':{'image':image}}}
+        if broken:content['services']['api']['command']=['python','-c','raise SystemExit(42)']
         if socket:
             content['services']['api']['volumes']=['ll244_recovery_socket:/run/pgsocket:ro']
+            content['services']['maintenance']['volumes']=['ll244_recovery_socket:/run/pgsocket:ro']
             content['volumes']={'ll244_recovery_socket':{'external':True,'name':socket}}
         override.write_text(json.dumps(content))
         return base+['-f',str(override)]
@@ -83,12 +93,42 @@ def main():
         if args.resolved_auth_address:arguments+=['--resolved-auth-address',args.resolved_auth_address]
         command(arguments)
     release=compose(new)
-    command(release+['run','--rm','--no-deps','api','python','manage.py','migrate','--noinput'])
-    command(release+['up','--detach','--wait','--no-deps','api']);ready();smoke()
-    print('Candidate deployed by immutable image ID; controlled migration and real HTTPS business smoke passed.',flush=True)
+    try:
+        if args.inject_failure=='migration':
+            failure="from django.db import transaction,connection;exec(\"with transaction.atomic():\\n with connection.cursor() as c:c.execute('CREATE TABLE public.ll244_failed_migration(id integer)')\\n raise RuntimeError('Controlled migration failure')\")"
+            command(release+['run','--rm','--no-deps','maintenance','python','manage.py','shell','-c',failure])
+        command(release+['run','--rm','--no-deps','maintenance','python','manage.py','migrate','--noinput'])
+        command(release+['run','--rm','--no-deps','maintenance','python','scripts/staging_runtime_role.py'])
+        command(compose(new,broken=args.inject_failure=='readiness')+['up','--detach','--wait','--wait-timeout','30','--no-deps','api'])
+        ready();smoke()
+        if args.inject_failure:raise RuntimeError('The injected failure did not fail the candidate.')
+    except Exception:
+        expected_failure=False
+        if args.inject_failure=='migration':expected_failure=diagnostic.exists() and 'Controlled migration failure' in diagnostic.read_text(errors='replace')
+        elif args.inject_failure=='readiness':
+            stopped=command(base+['ps','--all','-q','api']).strip()
+            expected_failure=bool(stopped) and command(['docker','inspect','--format','{{.State.ExitCode}}',stopped]).strip()=='42'
+        command(compose(old)+['up','--detach','--wait','--no-deps','api']);ready();smoke()
+        check="from django.db import connection;c=connection.cursor();c.execute(\"SELECT to_regclass('public.ll244_failed_migration')\");assert c.fetchone()[0] is None"
+        command(compose(old)+['run','--rm','--no-deps','maintenance','python','manage.py','shell','-c',check])
+        state.update(status='recovered_expected_failure' if expected_failure else 'failed_recovered',failure=args.inject_failure,active_socket=active_socket,active_image=old)
+        state_path.write_text(json.dumps(state,indent=2))
+        if expected_failure:
+            print('Controlled '+args.inject_failure+' failure: previous image/socket recovered, real runtime smoke passed and migration probe rolled back.',flush=True)
+            return
+        raise
+    print('Candidate deployed; migration and runtime HTTPS smoke passed.',flush=True)
     command(compose(old)+['up','--detach','--wait','--no-deps','api']);ready();smoke()
-    state['application_rollback']='passed';state['status']='restoring';state_path.write_text(json.dumps(state,indent=2))
-    print('Previous immutable image restored on the migrated schema; business smoke passed without destructive migration reversal.',flush=True)
+    state['application_rollback']='passed'
+    if args.skip_restore:
+        command(compose(new)+['up','--detach','--wait','--no-deps','api']);ready();smoke()
+        stage['image']=new
+        (ROOT/'.docker/staging-state.json').write_text(json.dumps(stage,indent=2))
+        state.update(status='passed',active_socket=active_socket,active_image=new,finished_utc=datetime.now(timezone.utc).isoformat())
+        state_path.write_text(json.dumps(state,indent=2))
+        print('Repeatable release passed; active recovery socket preserved throughout deployment and rollback.',flush=True)
+        return
+    state['status']='restoring';state_path.write_text(json.dumps(state,indent=2))
     suffix=uuid4().hex[:10]
     recovered='loyloop-recovery-'+suffix
     socket='loyloop-recovery-socket-'+suffix
@@ -127,7 +167,8 @@ def main():
         assert int(pg('psql',['-At','-c','SELECT count(*) FROM '+q(schema)+'.'+q(table)]).strip())==evidence['table_counts'][qualified],'Restored table count mismatch'
     print('New no-network recovery target: all restored table counts and SHA256 fingerprints match.',flush=True)
     release=compose(new,socket)
-    command(release+['run','--rm','--no-deps','api','python','scripts/test_adoption.py'])
+    command(release+['run','--rm','--no-deps','maintenance','python','scripts/test_adoption.py'])
+    command(release+['run','--rm','--no-deps','maintenance','python','scripts/staging_runtime_role.py'])
     command(release+['up','--detach','--wait','--no-deps','api']);ready();smoke()
     state.update(status='passed',finished_utc=datetime.now(timezone.utc).isoformat(),restore_tables=len(evidence['content_sha256']),recovered_service_smoke='passed',deployment='passed',controlled_migration='passed',active_image=new)
     state_path.write_text(json.dumps(state,indent=2))

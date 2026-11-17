@@ -30,6 +30,8 @@ def main():
     env=dotenv_values(ROOT/'.docker/staging.env',interpolate=False)
     compose=['docker','compose','--env-file',str(ROOT/'docker/compose.env'),
         '--project-name',state['project'],'-f',str(ROOT/'compose.staging.yaml')]
+    override=ROOT/'.docker/ll244-release-override.json'
+    if override.exists():compose+=['-f',str(override)]
     context=ssl.create_default_context(cafile=str(ROOT/'.docker/staging-ca.crt'))
     class NoRedirects(urllib.request.HTTPRedirectHandler):
         def redirect_request(self,*args,**kwargs):return None
@@ -40,7 +42,7 @@ def main():
             (ROOT/'.docker/staging-smoke-private.log').write_text(r.stdout+r.stderr)
             raise RuntimeError('Staging container operation failed; private diagnostic saved.')
         return r.stdout
-    fixture=json.loads(command(['exec','-T','api','python','scripts/staging_entry.py','python','manage.py','staging_fixture','--actor',session['test_actor_id']]))
+    fixture=json.loads(command(['run','--rm','--no-deps','maintenance','python','manage.py','staging_fixture','--actor',session['test_actor_id']]))
 
     def request(path,method='GET',body=None,credential=token,expected=200):
         headers={'Content-Type':'application/json'}
@@ -58,6 +60,7 @@ def main():
 
     request('/api/session/',credential=None,expected=401)
     request('/api/session/',credential='invalid-test-session',expected=401)
+    role_probe=command(['exec','-T','api','python','scripts/staging_entry.py','python','-c',"import django;django.setup();from django.db import connection;c=connection.cursor();c.execute('SELECT current_user');assert c.fetchone()[0]=='loyloop_backend'"])
     current=request('/api/session/')
     if current['id']!=session['test_actor_id']:
         raise RuntimeError('Staging did not authenticate the intended verified actor.')
@@ -79,7 +82,7 @@ def main():
     request(base+'/validate-claim/','POST',{'code':code},expected=409)
     if request('/api/claim-requests/'+code+'/')['status']!='approved':
         raise RuntimeError('Merchant approval did not persist.')
-    command(['exec','-T','api','python','scripts/staging_entry.py','python','manage.py','staging_fixture','--actor',session['test_actor_id'],'--verify-business',fixture['own']])
+    command(['run','--rm','--no-deps','maintenance','python','manage.py','staging_fixture','--actor',session['test_actor_id'],'--verify-business',fixture['own']])
     # Metrics use text rather than JSON; check via its own authenticated request.
     req=urllib.request.Request(state['local_url']+'/internal/metrics/',headers={'Authorization':'Bearer '+env['METRICS_BEARER_TOKEN']})
     with opener.open(req,timeout=15) as response:

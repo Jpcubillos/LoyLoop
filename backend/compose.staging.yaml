@@ -21,9 +21,9 @@ services:
     platform: linux/amd64
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.staging
-      DATABASE_CONFIG_FILE: /run/secrets/staging_env
+      DATABASE_CONFIG_FILE: /run/secrets/staging_runtime_env
     entrypoint: [python, scripts/staging_entry.py]
-    secrets: [staging_env]
+    secrets: [staging_runtime_env]
     volumes:
       - staging_socket:/run/pgsocket:ro
     networks: [staging]
@@ -44,6 +44,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+  maintenance:
+    extends:
+      service: api
+    profiles: [maintenance]
+    environment:
+      DATABASE_CONFIG_FILE: /run/secrets/staging_env
+      STAGING_MAINTENANCE: 'yes'
+      DB_USER: postgres
+    secrets: [staging_env]
   proxy:
     image: caddy:2-alpine@sha256:fc9cbc100585871d18d4e451cca7021785c90a7006087427ae5ceb3e4efe6424
     platform: linux/amd64
@@ -81,3 +90,6 @@ secrets:
     file: .docker/staging.env
   staging_ca:
     file: .docker/staging-ca.crt
+
+  staging_runtime_env:
+    file: .docker/staging-runtime.env

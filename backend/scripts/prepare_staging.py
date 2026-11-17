@@ -62,6 +62,15 @@ def main():
     elif (previous.get('status') not in {'restoring','restored'} or previous.get('archive_sha256')!=evidence['archive_sha256']
             or dotenv_values(env_path,interpolate=False).get('DB_PASSWORD')!=db_password):
         raise RuntimeError('The recorded staging restore cannot be resumed safely.')
+    runtime_path=ROOT/'.docker/staging-runtime.env'
+    if not runtime_path.exists():
+        from dotenv import set_key
+        runtime=dict(dotenv_values(env_path,interpolate=False))
+        runtime.update(DB_USER='loyloop_backend',DB_PASSWORD=secrets.token_urlsafe(48))
+        runtime_path.touch(mode=0o600)
+        for key,value in runtime.items():
+            if value is not None:set_key(runtime_path,key,value,quote_mode='always')
+        runtime_path.chmod(0o600)
     env_path.chmod(0o600);password_path.chmod(0o600)
     ca=ROOT/'.docker/staging-ca.crt'
     ca.touch(exist_ok=True)
@@ -123,9 +132,10 @@ def main():
         database_command('pg_restore',['--no-owner','--no-privileges','--exit-on-error'],archive.read_bytes())
     state['status']='restored'
     state_path.write_text(json.dumps(state,indent=2))
-    output=docker(compose+['run','--rm','--no-deps','api','python','scripts/test_adoption.py'])
+    output=docker(compose+['run','--rm','--no-deps','maintenance','python','scripts/test_adoption.py'])
     if b'Restored-copy adoption:' not in output:
         raise RuntimeError('Adoption did not report success.')
+    docker(compose+['run','--rm','--no-deps','maintenance','python','scripts/staging_runtime_role.py'])
     state['adoption']='passed';state['status']='starting'
     state_path.write_text(json.dumps(state,indent=2))
     docker(compose+['up','--detach','--wait','api','proxy'])

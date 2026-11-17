@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-path=Path('/run/secrets/staging_env')
+path=Path(os.environ.get('DATABASE_CONFIG_FILE','/run/secrets/staging_env'))
 if not path.is_file():
     raise SystemExit('Staging secret is required.')
 load_dotenv(path,override=False,interpolate=False)

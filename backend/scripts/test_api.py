@@ -14,7 +14,7 @@ import django
 django.setup()
 from django.core.management import call_command
 from django.db import connection,connections
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient as OwnerAPIClient
 from config.authentication import Principal
 from loyalty.api import ensure_customer
 from loyalty.models import Business,AppUser,CustomerProfile,CustomerIdentity,BusinessMembership,Reward
@@ -28,8 +28,25 @@ for name in ['loyloop.http','loyloop.audit','django.request']:
     logger.handlers=[handler]
     logger.propagate=False
 
+
+class APIClient(OwnerAPIClient):
+    """Every request, including worker threads, runs with runtime SQL privileges."""
+    def generic(self,*args,**kwargs):
+        with connection.cursor() as cursor:cursor.execute('SET ROLE loyloop_backend')
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT current_user');assert cursor.fetchone()[0]=='loyloop_backend'
+            return super().generic(*args,**kwargs)
+        finally:
+            with connection.cursor() as cursor:cursor.execute('RESET ROLE')
+
 def main():
     call_command('migrate',verbosity=0,interactive=False)
+    from loyalty.management.commands.provision_backend_role import grant_runtime_access
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1 FROM pg_roles WHERE rolname='loyloop_backend'")
+        if not cursor.fetchone():cursor.execute('CREATE ROLE loyloop_backend NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS')
+        grant_runtime_access(cursor)
     actors={name:Principal(uuid4(),name+'-'+uuid4().hex[:10]+'@example.invalid',name) for name in ['owner','manager','cashier','other','customer','legacy']}
     with connection.cursor() as cursor:
         for actor in actors.values():
@@ -233,5 +250,7 @@ if __name__=='__main__':
         main()
     finally:
         call_command('migrate','loyalty','zero',verbosity=0,interactive=False)
+        with connection.cursor() as cursor:
+            cursor.execute('DROP OWNED BY loyloop_backend');cursor.execute('DROP ROLE loyloop_backend')
         connection.close();connection.close_pool()
     print('API/PG: all permission, claim, identity, profile and telemetry assertions passed (Auth transport mocked).')
