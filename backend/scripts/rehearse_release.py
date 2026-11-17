@@ -48,7 +48,7 @@ def main():
             raise RuntimeError('An isolated deployment command failed; private diagnostic saved.')
         return result.stdout.decode()
     base=['docker','compose','--env-file',str(ROOT/'docker/compose.env'),'--project-name',stage['project'],'-f',str(ROOT/'compose.staging.yaml')]
-    database=command(base+['ps','-q','database']).strip()
+    database=stage.get('recovery_container') or command(base+['ps','-q','database']).strip()
     if not database or command(['docker','inspect','--format','{{.HostConfig.NetworkMode}}',database]).strip()!='none':
         raise RuntimeError('The recorded staging database must have no network.')
     api=command(base+['ps','-q','api']).strip()
