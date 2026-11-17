@@ -1,5 +1,7 @@
 """Provision only the no-network staging role from the separate maintenance job."""
 from pathlib import Path
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from dotenv import dotenv_values
 import django
 django.setup()
