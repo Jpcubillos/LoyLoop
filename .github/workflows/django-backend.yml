@@ -2,9 +2,7 @@ name: Django backend
 
 on:
   push:
-    paths: ["backend/**", ".github/workflows/django-backend.yml"]
   pull_request:
-    paths: ["backend/**", ".github/workflows/django-backend.yml"]
   workflow_dispatch:
 
 permissions:

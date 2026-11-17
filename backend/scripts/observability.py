@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('action',choices=['up','check','test-alert'])
+    parser.add_argument('action',choices=['up','check','test-alert','test-liveness-alert'])
     args=parser.parse_args()
     state=json.loads((ROOT/'.docker/staging-state.json').read_text())
     if not re.fullmatch('loyloop-stage-[a-f0-9]{8}',state['project']):
@@ -29,7 +29,7 @@ def main():
             (ROOT/'.docker/observability-private-diagnostic.log').write_text(result.stdout+result.stderr)
             raise RuntimeError('Monitoring command failed; private diagnostic saved.')
         return result.stdout
-    database=command(base+['ps','-q','database']).strip()
+    database=state.get('recovery_container') or command(base+['ps','-q','database']).strip()
     if not database or command(['docker','inspect','--format','{{.HostConfig.NetworkMode}}',database]).strip()!='none':
         raise RuntimeError('Only the recorded no-network staging database is permitted.')
     env=dotenv_values(ROOT/'.docker/staging.env',interpolate=False)
@@ -39,7 +39,9 @@ def main():
     if not token.exists():
         token.write_text(env['METRICS_BEARER_TOKEN']);token.chmod(0o600)
     if args.action=='up':
-        command(overlay+['up','--detach','prometheus','alertmanager','blackbox'])
+        command(overlay+['up','--detach','prometheus','alertmanager','blackbox','alert-receiver'])
+        # Bind-mounted configuration content does not recreate the service.
+        command(overlay+['restart','alertmanager','prometheus'])
     def query(path):
         with urllib.request.urlopen('http://127.0.0.1:19090'+path,timeout=10) as response:
             return json.load(response)
@@ -58,40 +60,43 @@ def main():
         print('Prometheus scrape and HTTPS health/readiness probes passed. Monitoring UI: http://localhost:19090')
         return
 
+    liveness=args.action=='test-liveness-alert'
+    alert_name='LoyLoopLivenessDown' if liveness else 'LoyLoopReadinessDown'
+    target=command(base+['ps','-q','api']).strip() if liveness else database
     since=time.time()
     def received(status):
-        logs=command(base+['logs','--no-color','--no-log-prefix','--tail','500','api'])
+        logs=command(overlay+['logs','--no-color','--no-log-prefix','--tail','500','alert-receiver'])
         for line in logs.splitlines():
             if not line.startswith('{'):continue
             event=json.loads(line)
-            if (event.get('event')=='operational_alert' and event.get('alert')=='LoyLoopReadinessDown'
+            if (event.get('event')=='operational_alert' and event.get('alert')==alert_name
                     and event.get('status')==status and datetime.fromisoformat(event['timestamp']).timestamp()>=since):
                 return True
         return False
     started=time.monotonic()
     try:
-        command(base+['stop','database'])
-        print('Stopped only the isolated staging database; waiting for the real readiness alert.',flush=True)
+        command(['docker','stop',target])
+        print('Stopped only the isolated staging '+('API' if liveness else 'database')+'; waiting for independent alert delivery.',flush=True)
         deadline=time.monotonic()+100
         while time.monotonic()<deadline:
             alerts=query('/api/v1/alerts')['data']['alerts']
-            firing=any(row['labels'].get('alertname')=='LoyLoopReadinessDown' and row['state']=='firing' for row in alerts)
+            firing=any(row['labels'].get('alertname')==alert_name and row['state']=='firing' for row in alerts)
             if firing and received('firing'):break
             time.sleep(2)
-        else:raise RuntimeError('The readiness failure alert was not delivered.')
+        else:raise RuntimeError('The independent '+alert_name+' notification was not delivered.')
     finally:
-        command(base+['up','--detach','--wait','database'])
+        command(['docker','start',target])
     deadline=time.monotonic()+90
     while time.monotonic()<deadline:
         if metrics_ready() and received('resolved'):break
         time.sleep(2)
     else:raise RuntimeError('The restored staging service or resolved alert did not recover.')
     evidence={'timestamp_utc':datetime.now(timezone.utc).isoformat(),
-        'scope':'isolated restored-copy Docker staging',
+        'scope':'isolated restored-copy Docker staging','alert_name':alert_name,'independent_receiver':True,
         'metrics_scrape':'passed','verified_tls_probes':'passed',
         'readiness_alert_firing_delivery':'passed','readiness_alert_resolved_delivery':'passed',
         'database_network':'none','duration_seconds':round(time.monotonic()-started,2)}
-    (ROOT/'.docker/observability-evidence.json').write_text(json.dumps(evidence,indent=2))
+    (ROOT/('.docker/liveness-evidence.json' if liveness else '.docker/observability-evidence.json')).write_text(json.dumps(evidence,indent=2))
     print('Real alert rehearsal passed: database failure detected, firing notification received, database restarted and resolved notification received.')
 
 
