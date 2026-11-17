@@ -52,7 +52,10 @@ def main():
     if not database or command(['docker','inspect','--format','{{.HostConfig.NetworkMode}}',database]).strip()!='none':
         raise RuntimeError('The recorded staging database must have no network.')
     api=command(base+['ps','-q','api']).strip()
-    old=command(['docker','inspect','--format','{{.Image}}',api]).strip()
+    old_ref=command(['docker','inspect','--format','{{.Config.Image}}',api]).strip()
+    old=command(['docker','image','inspect','--format','{{.Id}}',old_ref]).strip()
+    # Keep the manifest reachable even if this build replaces the same tag.
+    command(['docker','image','tag',old,'loyloop-django:rollback-'+run_id])
     revision=command(['git','-C',str(ROOT.parent),'rev-parse','HEAD']).strip()
     if command(['git','-C',str(ROOT.parent),'status','--porcelain']).strip():
         raise RuntimeError('Commit the reviewed source before building an immutable release.')
