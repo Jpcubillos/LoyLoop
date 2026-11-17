@@ -89,3 +89,15 @@ jobs:
         run: >-
           docker run --rm --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m
           loyloop-django:ci python -m unittest discover -s tests -v
+
+  monitoring-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate alert rules and detection/recovery scenarios
+        run: >-
+          docker run --rm --network none --entrypoint /bin/promtool
+          --volume "$PWD/backend/docker/observability:/rules:ro"
+          --workdir /rules
+          prom/prometheus:v3.16.0@sha256:89c1a644817e9ad70fa2af76c84898e327c1de7063735f962e8313b1e28672c3
+          test rules alerts.test.yaml

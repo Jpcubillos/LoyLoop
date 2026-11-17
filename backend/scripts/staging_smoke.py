@@ -14,6 +14,8 @@ ROOT=Path(__file__).resolve().parents[1]
 def main():
     state=json.loads((ROOT/'.docker/staging-state.json').read_text())
     session=json.loads((ROOT/'.docker/validation-session.json').read_text())
+    if state.get('local_url')!='https://localhost:8444' or not state.get('project','').startswith('loyloop-stage-'):
+        raise RuntimeError('Only the recorded local HTTPS staging origin is permitted.')
     if state['status']!='ready' or session['expires_at']<=time.time():
         raise RuntimeError('Ready staging and an unexpired private test session are required.')
     token=session['access_token']
@@ -21,6 +23,9 @@ def main():
     compose=['docker','compose','--env-file',str(ROOT/'docker/compose.env'),
         '--project-name',state['project'],'-f',str(ROOT/'compose.staging.yaml')]
     context=ssl.create_default_context(cafile=str(ROOT/'.docker/staging-ca.crt'))
+    class NoRedirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self,*args,**kwargs):return None
+    opener=urllib.request.build_opener(urllib.request.HTTPSHandler(context=context),NoRedirects())
     def command(args):
         r=subprocess.run(compose+args,cwd=ROOT,capture_output=True,text=True)
         if r.returncode:
@@ -35,7 +40,7 @@ def main():
         req=urllib.request.Request(state['local_url']+path,method=method,headers=headers,
             data=json.dumps(body).encode() if body is not None else None)
         try:
-            with urllib.request.urlopen(req,context=context,timeout=20) as response:
+            with opener.open(req,timeout=20) as response:
                 status=response.status;raw=response.read()
         except urllib.error.HTTPError as exc:
             status=exc.code;raw=exc.read()
@@ -69,7 +74,7 @@ def main():
     command(['exec','-T','api','python','scripts/staging_entry.py','python','manage.py','staging_fixture','--actor',session['test_actor_id'],'--verify-business',fixture['own']])
     # Metrics use text rather than JSON; check via its own authenticated request.
     req=urllib.request.Request(state['local_url']+'/internal/metrics/',headers={'Authorization':'Bearer '+env['METRICS_BEARER_TOKEN']})
-    with urllib.request.urlopen(req,context=context,timeout=15) as response:
+    with opener.open(req,timeout=15) as response:
         if response.status!=200 or b'loyloop_http_requests_total' not in response.read():
             raise RuntimeError('Staging metrics verification failed.')
     logs=command(['logs','--no-color','--no-log-prefix','api'])
