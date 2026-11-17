@@ -63,9 +63,9 @@ jobs:
       DB_PORT: '5432'
       DB_PASSWORD: isolated-ll235-only
     steps:
+      - uses: actions/checkout@v4
       - name: Require mobile authentication checks
         run: test "${{ needs.mobile-auth.result }}" = "success"
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
