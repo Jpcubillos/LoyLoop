@@ -23,3 +23,11 @@ Fuente: historia y tres subtareas compartidas por el usuario en esta conversaci�
 ## Conclusión
 
 LL-11 no está completa conforme al Definition of Done recibido. No hace falta reconstruir todas las pantallas ni sustituir Supabase Auth. Se debe actualizar integración/CI/documentación y demostrar los flujos reales y nativos. Las implementaciones y evidencias de LL-235/LL-244 son dependencias útiles, pero no demuestran por sí mismas registro/OTP/recuperación en la app.
+
+## Evidencia adicional — 2026-11-17
+
+GitHub Actions [44116738147](https://github.com/Jpcubillos/LoyLoop/actions/runs/44116738147), revisión 2b201819: seis trabajos correctos, incluido mobile-auth (28 tests, TypeScript y recorrido UI con mocks). El check PostgreSQL obligatorio depende del resultado móvil y falla si este no pasa; la política de aprobaciones del repositorio no se modificó. Se corrigió el orden del checkout antes del gate, sin omitir la comprobación.
+
+`node scripts/auth-live-smoke.cjs --configured-demo` pasó en la app cliente web real, contra Supabase Auth y Django loopback con rol mínimo: acceso, persistencia al recargar, cierre de sesión y ausencia de datos de la cuenta anterior. No envía correos, no cambia contraseñas, no guarda capturas ni credenciales y no transmite tokens al túnel. Evidencia privada saneada: backend/.docker/ll11-real-login-evidence.json. Esta comprobación NO acredita alta/OTP por correo, recuperación real ni almacenamiento nativo.
+
+El acceso del navegador al panel de Supabase no está conectado, por lo que no se comprobó ni modificó desde aquí el contenido de plantillas SMTP. La app real queda preparada en localhost:8092/login para el recorrido del titular del buzón; la aceptación de correo y dispositivo permanece abierta.
