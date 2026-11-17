@@ -1,25 +1,61 @@
-# LL-244: operaciones y pendientes de staging
+# LL-244 — operación y recuperación en staging Docker
 
-Este documento describe una preparación inicial. Todavía no existe un despliegue Django ni una base PostgreSQL configurada para este backend. El endpoint `/health/` es de vida; no demuestra que la base esté disponible ni que el servicio pueda atender operaciones de negocio.
+Estado verificado: 2026-11-17. Staging es un entorno Docker aislado en este PC, separado de la base de negocio Supabase. No se presenta como hosting permanente ni alta disponibilidad. La evidencia está en [LL-244](../mobile/docs/hus/LL-244.md).
 
-## CI y protección de cambios
+## CI y bloqueo de fallos
 
-El workflow `django-backend.yml` instala dependencias fijadas, comprueba su consistencia, ejecuta pruebas, smoke HTTP, `check --deploy` y migraciones incorporadas sobre SQLite efímero en Python 3.11 y 3.12. Un fallo termina el job con error. Para impedir merges, un administrador debe configurar los checks requeridos en la protección de rama o ruleset; el archivo de workflow por sí solo no la activa.
+`.github/workflows/django-backend.yml` se ejecuta en cada push/PR y manualmente, sin filtros de rutas que dejarían checks obligatorios pendientes. Jobs: `verify (3.11)`, `verify (3.12)`, `postgres`, `docker`, `monitoring-rules`. Cubren dependencias fijadas, configuración segura, contratos/autorización, PostgreSQL 17 real, migraciones, concurrencia, imagen Linux sin secretos y reglas Prometheus. Un fallo de prueba devuelve error al job; no se desactivan pruebas ni se despliega desde un job fallido.
 
-Faltan LL-235 y la integración PostgreSQL de Django antes de poder verificar migraciones reales, transacciones, concurrencia, aislamiento, permisos y restauraciones contra PostgreSQL. Las pruebas SQLite actuales no acreditan esos criterios. A medida que se creen endpoints y permisos se añadirán pruebas de contrato y de acceso para cada caso positivo y negativo.
+Con autorización explícita del propietario se activaron los cinco checks obligatorios en main, con validación estricta de la base actual e inclusión de administradores. No se modificó la política de aprobaciones de PR. La rama de entrega conserva sus cambios sin fusionar a main.
 
-## Auditoría
+## Identidad, logs y observabilidad
 
-`config.audit.record_event` emite JSON con fecha UTC, tipo y resultado predefinidos, y UUID de actor y comercio. Solo deben pasarse identificadores obtenidos del contexto autenticado y autorizado en el servidor, nunca de cabeceras confiadas ciegamente. No admite cargas arbitrarias ni registra secretos. Los tipos existentes son una base, no constituyen evidencia de eventos reales: todavía no hay endpoints de negocio Django que la invoquen ni almacenamiento o retención configurados.
+La API verifica Supabase Auth y autoriza el comercio desde datos del servidor. Los eventos de negocio se emiten tras commit con actor, tenant y trace_id; spans HTTP correlacionados y métricas usan rutas normalizadas. No registrar cuerpos, emails, códigos QR, contraseñas ni tokens. Los tests comprueban redacción y correlación, y el smoke real verifica eventos de la acción validada.
 
-## Procedimiento propuesto para staging
+Prometheus recoge contadores/histogramas multiproceso y Blackbox verifica HTTPS health/readiness con el CA de staging. Retención local Prometheus: 24 horas/128 MB; logs API y receptor: 3 archivos de 5 MB. UI solo en loopback: http://localhost:19090 y Alertmanager en http://localhost:19093. No exponer esos puertos a internet.
 
-1. Preparar un proyecto de staging aislado, servidor, secretos, dominio y permisos. No utilizar la base compartida de producción para ensayos de migración o recuperación.
-2. Una vez implementada LL-235, validar la conexión TLS y la identidad del destino; ejecutar pruebas PostgreSQL y comprobar que CI y las reglas de protección terminan correctamente.
-3. Crear un respaldo consistente con herramientas compatibles con la versión PostgreSQL, almacenarlo cifrado con acceso restringido y comprobar una restauración en una base separada. Incluir en el plan esquema, datos, roles y demás recursos necesarios; verificar qué queda fuera del backup del proveedor.
-4. Publicar una versión inmutable identificada por commit. Ejecutar migraciones controladas una sola vez mediante un trabajo separado, registrar el resultado y después iniciar instancias. Comprobar health, readiness real y recorrido de prueba, sin registrar credenciales.
-5. Para rollback, verificar previamente la compatibilidad entre la versión anterior y el esquema actualizado. Si no son compatibles, utilizar una migración correctiva o un plan de recuperación aprobado; restaurar una copia implica pérdida potencial de escrituras posteriores y debe ensayarse primero en un destino aislado.
-6. Configurar recopilación de logs, trazas, métricas y alertas con un proveedor elegido, políticas de retención y responsables. Alertar por fallos de health/readiness, tasa de errores, latencia y fallo o antigüedad del backup. No exportar tokens, contraseñas, datos de solicitudes ni información personal como etiquetas.
-7. Guardar evidencia de ejecución, versión, hora, resultados de restauración y tiempos observados sin credenciales ni datos personales. Repetir el ensayo tras cambios relevantes.
+Las alertas cubren liveness, readiness, scrape, tasa de errores y latencia. Alertmanager entrega notificaciones autenticadas a un receptor independiente de Django, sin puerto publicado. El enlace HTTP entre ambos queda en la red Docker privada; los sondeos de aplicación usan HTTPS validado. El receptor solo emite nombres/estados/severidad permitidos y descarta contenido arbitrario. No hay envío a email/Slack ni guardia externa configurados: el operador consulta Alertmanager/logs locales.
 
-No se ha elegido plataforma, proveedor de observabilidad, destino de staging, ni configurado respaldos o alertas. Tampoco se ha probado un despliegue, rollback o restore en staging.
+## Arranque después de apagar el PC
+
+Iniciar Docker Desktop. Desde la raíz del repo, en el staging ya recuperado:
+
+```powershell
+$stageState = Get-Content backend/.docker/staging-state.json | ConvertFrom-Json
+docker start $stageState.recovery_container
+docker compose --env-file backend/docker/compose.env --project-name $stageState.project -f backend/compose.staging.yaml -f backend/.docker/ll244-release-override.json up --detach --wait --no-deps api proxy
+.\backend\.venv\Scripts\python.exe backend/scripts/observability.py up
+.\backend\.venv\Scripts\python.exe backend/scripts/observability.py check
+.\backend\.venv\Scripts\python.exe backend/scripts/staging_smoke.py --login-configured-demo
+```
+
+El override privado conserva la imagen exacta y el socket de la base recuperada: no iniciar la API recuperada usando solo el compose base, pues apuntaría al socket anterior. No copiar ni imprimir los secretos de `.docker`. La sesión de prueba se obtiene en memoria y solo se envía a https://localhost:8444, con CA verificado y redirecciones rechazadas. Si el DNS de Python en Windows falla, resolver Auth con Resolve-DnsName y pasar su dirección recién obtenida mediante `--resolved-auth-address`; esto no desactiva TLS ni modifica DNS/hosts del PC. No guardar direcciones IP como configuración permanente.
+
+El servicio principal tiene su arranque separado: `python backend/scripts/docker.py up`; no comparte el socket o datos de staging. El túnel público temporal requiere PC/Docker y puede cambiar de URL; no se usaron tokens a través del túnel para estos ensayos.
+
+## Crear y ensayar otro staging
+
+Se necesitan un backup autorizado con restore previo verificado, CA/secretos privados y una cuenta de pruebas explícitamente configurada que exista en su snapshot. `prepare_staging.py --archive <database.dump>` crea un proyecto nuevo, restaura sin red y comprueba adopción. Si existe estado anterior, se detiene: no sobreescribe datos/secretos para repetir pruebas. Usar otro checkout/entorno de staging limpio o revisar el estado existente deliberadamente.
+
+Con staging listo y código revisado/commiteado, ejecutar desde la raíz:
+
+```powershell
+.\backend\.venv\Scripts\python.exe backend/scripts/rehearse_release.py --apply --archive backend/.docker/backups/<respaldo-autorizado>/database.dump
+```
+
+El ensayo construye una imagen identificada por commit e ID SHA-256, aplica migraciones una vez en un comando separado, despliega y comprueba Auth/CRUD/aislamiento/QR/persistencia. Vuelve a la imagen previa con el esquema actualizado y comprueba de nuevo el recorrido. Después restaura en OTRO contenedor nuevo sin red, compara todas las tablas por recuento/SHA-256, adopta las migraciones y despliega el servicio sobre esa copia; repite el smoke autenticado. El script deja estado privado inmediatamente y no reutiliza automáticamente un ensayo anterior. Ante fallo, revisar el diagnóstico privado y los IDs registrados; no borrar volúmenes o forzar migraciones para obtener verde.
+
+El rollback probado es de aplicación sobre esquema compatible, sin deshacer migraciones destructivas. Para un futuro cambio incompatible, hace falta un plan específico de migración correctiva/recuperación. Restaurar un backup en producción podría perder escrituras posteriores: estos scripts solo restauran copias aisladas y no aceptan la base remota como destino.
+
+## Ensayos de alertas
+
+```powershell
+.\backend\.venv\Scripts\python.exe backend/scripts/observability.py test-liveness-alert
+.\backend\.venv\Scripts\python.exe backend/scripts/observability.py test-alert
+```
+
+Detienen exclusivamente la API o la base staging registrada sin red, comprueban firing en Prometheus y entrega al receptor independiente, reinician el objetivo en finally y exigen notificación resolved y recuperación de métricas/sondeos. No apuntan a Supabase ni a otros proyectos Docker. `up` recarga Prometheus/Alertmanager porque cambiar archivos montados no recarga por sí solo esos procesos.
+
+## Respaldos y límites
+
+Los dumps privados autorizados contienen public/auth/storage, incluidos hashes y metadatos; quedan fuera de Git y no están cifrados como archivo. Proteger su acceso y no compartirlos. Los respaldos ensayados no incluyen binarios Storage, configuración Supabase, roles globales ni otros esquemas: no son recuperación completa de toda la plataforma. La restauración verificada de 51 tablas y la operación de la API cubren el backend de esta HU. No se ha configurado backup periódico externo, RPO/RTO contractual, retención de producción ni hosting permanente. Esas decisiones deben definirse antes de producción y no se infieren del ensayo local.

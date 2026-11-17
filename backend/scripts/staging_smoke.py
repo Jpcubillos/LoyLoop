@@ -1,5 +1,6 @@
 """Real Supabase Auth + HTTPS API + restored-copy PostgreSQL validation."""
 import json
+import argparse
 from pathlib import Path
 import ssl
 import subprocess
@@ -13,7 +14,14 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def main():
     state=json.loads((ROOT/'.docker/staging-state.json').read_text())
-    session=json.loads((ROOT/'.docker/validation-session.json').read_text())
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--login-configured-demo',action='store_true')
+    parser.add_argument('--resolved-auth-address')
+    args=parser.parse_args()
+    from demo_session import configured_test_session
+    if state.get('local_url')!='https://localhost:8444':
+        raise RuntimeError('Only local HTTPS staging is accepted.')
+    session=configured_test_session(ROOT,args.resolved_auth_address) if args.login_configured_demo else json.loads((ROOT/'.docker/validation-session.json').read_text())
     if state.get('local_url')!='https://localhost:8444' or not state.get('project','').startswith('loyloop-stage-'):
         raise RuntimeError('Only the recorded local HTTPS staging origin is permitted.')
     if state['status']!='ready' or session['expires_at']<=time.time():

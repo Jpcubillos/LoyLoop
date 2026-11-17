@@ -97,7 +97,7 @@ def main():
         'readiness_alert_firing_delivery':'passed','readiness_alert_resolved_delivery':'passed',
         'database_network':'none','duration_seconds':round(time.monotonic()-started,2)}
     (ROOT/('.docker/liveness-evidence.json' if liveness else '.docker/observability-evidence.json')).write_text(json.dumps(evidence,indent=2))
-    print('Real alert rehearsal passed: database failure detected, firing notification received, database restarted and resolved notification received.')
+    print('Real '+alert_name+' rehearsal passed: failure detected, independent firing notification received, target restarted and resolved notification received.')
 
 
 if __name__=='__main__':

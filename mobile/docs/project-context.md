@@ -1,6 +1,6 @@
 # Contexto vigente de LoyLoop
 
-Actualizado: 2026-11-16. Base para implementar historias de usuario sobre la app existente.
+Actualizado: 2026-11-17. Base para implementar historias de usuario sobre la app existente.
 
 ## Producto
 
@@ -132,3 +132,7 @@ Este archivo reúne decisiones vigentes y límites conocidos. Los planes y espec
 Django Docker ya opera sobre la base Supabase existente. Ocho migraciones aplicadas sin alterar valores originales; escrituras/RPC de negocio revocadas a clientes y consumidores migrados a API. HTTPS local y health/readiness públicos correctos; Auth real y CRUD de oferta inactiva verificados por HTTPS local. Pool remoto: 60 consultas concurrentes sin préstamos pendientes. Respaldo/restore aislado de public/auth/storage: 51 tablas coinciden por SHA-256. Secretos y artefactos privados en backend/.docker, fuera de Git. Ver [LL-235](hus/LL-235.md), [POSTGRES.md](../../backend/POSTGRES.md) y [DOCKER.md](../../backend/DOCKER.md).
 
 El túnel temporal cambia de URL y necesita PC/Docker encendidos. El admin publicado y el dispositivo requieren sus propias configuraciones/despliegues; no se declara probado el recorrido autenticado por Cloudflare ni el dispositivo físico. LL-244 y Jira permanecen separados de la evidencia técnica local/remota de LL-235.
+
+## LL-244 — evidencia vigente 2026-11-17
+
+CI remoto con cinco jobs correctos y checks requeridos en main autorizados; observabilidad con actor/tenant/trace_id sin secretos; receptor de alertas independiente con caída/recuperación real de API y DB; despliegue inmutable, migración controlada, rollback compatible y restauración de 51 tablas con API operativa en staging Docker aislado. Ver [LL-244](hus/LL-244.md). Los párrafos anteriores que separaban LL-244 de la entrega LL-235 describen su alcance, no un pendiente que continúe sin verificar. No se declara hosting permanente, merge a main ni cierre Jira. Para reiniciar el staging recuperado se debe conservar el override privado de imagen/socket, según OPERATIONS.md.

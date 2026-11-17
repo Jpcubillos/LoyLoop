@@ -19,6 +19,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--archive',type=Path,required=True)
     parser.add_argument('--apply',action='store_true',required=True)
+    parser.add_argument('--resolved-auth-address')
     args=parser.parse_args()
     archive=args.archive.resolve()
     if not archive.is_relative_to((ROOT/'.docker/backups').resolve()) or archive.name!='database.dump':
@@ -78,7 +79,9 @@ def main():
         raise RuntimeError('The local HTTPS deployment failed readiness.')
     def smoke():
         # Session is prepared separately and sent only to the local HTTPS origin.
-        command([__import__('sys').executable,str(ROOT/'scripts/staging_smoke.py')])
+        arguments=[__import__('sys').executable,str(ROOT/'scripts/staging_smoke.py'),'--login-configured-demo']
+        if args.resolved_auth_address:arguments+=['--resolved-auth-address',args.resolved_auth_address]
+        command(arguments)
     release=compose(new)
     command(release+['run','--rm','--no-deps','api','python','manage.py','migrate','--noinput'])
     command(release+['up','--detach','--wait','--no-deps','api']);ready();smoke()
