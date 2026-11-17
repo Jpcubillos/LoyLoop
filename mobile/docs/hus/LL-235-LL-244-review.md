@@ -29,3 +29,13 @@ LL-235: verificadas en las suites actuales migraciones limpias reversibles, cons
 LL-244: confirmados código/pruebas de contratos, permisos y concurrencia, auditoría y receptor independiente; existen evidencias de cinco jobs CI, alertas firing/resolved, deploy/rollback y restore de 51 tablas con servicio operativo. La paridad de privilegios y los ciclos/fallos de despliegue anteriores impiden concluir que toda la operación está completamente cubierta.
 
 No se invalida lo que ya pasó; se acota su alcance. No declarar ninguna de las dos como garantía de producción ni usar el número de pruebas como sustituto de estos recorridos pendientes. Se recomienda completar los hallazgos antes del cierre definitivo conjunto. No se cambiaron estados de Jira ni código funcional en esta revisión.
+
+## Resolución de la revisión — 2026-11-17
+
+Los tres hallazgos quedaron comprobados tras los ajustes. Los contratos API completos pasaron bajo SET ROLE loyloop_backend (incluidos administración, identidad y cierre de cuenta; transporte Auth simulado). Staging pasó el recorrido HTTPS con login real loyloop_backend, credencial independiente y sin montar la credencial propietaria en la API. Los fixtures y migraciones se ejecutan en el servicio maintenance separado.
+
+Dos ciclos consecutivos de despliegue/rollback pasaron conservando el mismo recovery_socket. Después pasaron dos ensayos independientes: fallo de migración transaccional (tabla de prueba ausente tras rollback) y fallo de arranque con exit 42. Ambos recuperaron imagen/socket previos y pasaron el smoke autenticado con rol mínimo. Cada ejecución conserva su propio estado; un fallo inesperado no se clasifica como fallo controlado exitoso.
+
+El apagado dejó un ensayo interrumpido, registrado como interrupted_pc_shutdown y repetido en ejecuciones nuevas. Se corrigió además la retención de imágenes de rollback: se resuelve el manifiesto de Config.Image y se conserva una etiqueta privada por ejecución antes de reconstruir una etiqueta existente. No se cambiaron los datos de negocio remotos de Supabase.
+
+Evidencia privada: ll244-release-cb0a9b75e0d6.json y ll244-release-aae4eab22c75.json (ciclos), ll244-release-24a53463ab02.json (migración), ll244-release-c702480ee2e8.json (arranque), bajo backend/.docker, fuera de Git. Los hallazgos anteriores describen la revisión original; ya no constituyen pendientes vigentes con estos resultados. No equivale a hosting permanente, merge a main ni cierre de Jira.

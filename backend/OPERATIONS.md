@@ -59,3 +59,9 @@ Detienen exclusivamente la API o la base staging registrada sin red, comprueban 
 ## Respaldos y límites
 
 Los dumps privados autorizados contienen public/auth/storage, incluidos hashes y metadatos; quedan fuera de Git y no están cifrados como archivo. Proteger su acceso y no compartirlos. Los respaldos ensayados no incluyen binarios Storage, configuración Supabase, roles globales ni otros esquemas: no son recuperación completa de toda la plataforma. La restauración verificada de 51 tablas y la operación de la API cubren el backend de esta HU. No se ha configurado backup periódico externo, RPO/RTO contractual, retención de producción ni hosting permanente. Esas decisiones deben definirse antes de producción y no se infieren del ensayo local.
+
+## Ciclos posteriores y fallos controlados
+
+El procedimiento actualizado usa estados privados distintos por ejecución, conserva el socket activo y protege la imagen anterior mediante una etiqueta de rollback por ejecución. `--skip-restore` despliega sobre la misma base recuperada sin restaurar otra copia. Ejecutarlo dos veces comprueba los ciclos sucesivos. `--inject-failure migration` prueba una transacción fallida; `--inject-failure readiness` arranca un candidato que sale con código 42. Usar estas opciones exclusivamente en el staging aislado; ambos ensayos recuperan la imagen y socket previos y exigen el smoke antes de registrar recovered_expected_failure.
+
+La API monta únicamente staging_runtime_env. El servicio maintenance usa staging_env y postgres para migraciones/fixtures/aprovisionamiento. `staging_runtime_role.py` valida privilegios antes de habilitar LOGIN al rol restaurado y aplica los mismos grants de negocio del runtime Supabase. El smoke incluye el override privado tanto para API como maintenance, evitando cambiar al socket anterior.

@@ -136,3 +136,7 @@ El túnel temporal cambia de URL y necesita PC/Docker encendidos. El admin publi
 ## LL-244 — evidencia vigente 2026-11-17
 
 CI remoto con cinco jobs correctos y checks requeridos en main autorizados; observabilidad con actor/tenant/trace_id sin secretos; receptor de alertas independiente con caída/recuperación real de API y DB; despliegue inmutable, migración controlada, rollback compatible y restauración de 51 tablas con API operativa en staging Docker aislado. Ver [LL-244](hus/LL-244.md). Los párrafos anteriores que separaban LL-244 de la entrega LL-235 describen su alcance, no un pendiente que continúe sin verificar. No se declara hosting permanente, merge a main ni cierre Jira. Para reiniciar el staging recuperado se debe conservar el override privado de imagen/socket, según OPERATIONS.md.
+
+## Cierre de hallazgos LL-235/LL-244 — 2026-11-17
+
+API/CI prueban contratos con permisos loyloop_backend; staging usa login mínimo y credencial separada del mantenimiento. Verificados dos ciclos sobre el mismo socket y recuperación ante fallos reales controlados de migración/arranque. Estados privados por ejecución, imagen de rollback retenida antes del build. La auditoría y su resolución se conservan en docs/hus/LL-235-LL-244-review.md. No hay pendientes de esos tres hallazgos; merge/Jira/hosting permanente siguen siendo estados independientes.
