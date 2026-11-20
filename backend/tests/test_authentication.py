@@ -39,7 +39,7 @@ from config.authentication import verified_user
 uid=str(uuid4())
 response=MagicMock(); response.status=200
 response.read.return_value=json.dumps({'id':uid,'email':' Verified@Example.invalid ','email_confirmed_at':'2026-01-01T00:00:00Z','user_metadata':{'role':'owner','full_name':'Fixture'}}).encode()
-with patch('config.authentication.build_opener') as opener:
+with patch('config.authentication.verify_claims',return_value={'sub':uid}),patch('config.authentication.build_opener') as opener:
  opener.return_value.open.return_value.__enter__.return_value=response
  user=verified_user('private-token-marker')
  assert str(user.id)==uid and user.email=='verified@example.invalid'
@@ -59,7 +59,7 @@ from urllib.error import HTTPError
 from config.authentication import verified_user,AuthUnavailable
 from rest_framework.exceptions import AuthenticationFailed
 base={'id':str(uuid4()),'email':'fixture@example.invalid','email_confirmed_at':'2026-01-01','is_anonymous':False}
-with patch('config.authentication.build_opener') as opener:
+with patch('config.authentication.verify_claims',return_value={'sub':base['id']}),patch('config.authentication.build_opener') as opener:
  response=MagicMock();response.status=200
  opener.return_value.open.return_value.__enter__.return_value=response
  for changed in [{'email_confirmed_at':None},{'is_anonymous':True},{'id':'invalid'}]:
@@ -88,3 +88,37 @@ for url in ['http://test.supabase.co/auth/v1','https://user:password@test.supaba
   else:raise AssertionError('Unsafe Auth endpoint accepted')
   opener.assert_not_called()
 ''')
+
+    def test_invalid_signature_never_reaches_user_endpoint(self):
+        self.check("""
+import django;django.setup()
+from unittest.mock import patch
+from config.authentication import verified_user
+from rest_framework.exceptions import AuthenticationFailed
+with patch('config.authentication.build_opener') as provider:
+ try:verified_user('private-token-marker')
+ except AuthenticationFailed:pass
+ else:raise AssertionError('Malformed token accepted')
+ provider.assert_not_called()
+""")
+
+    def test_user_endpoint_must_match_signed_subject_and_is_checked_every_request(self):
+        self.check("""
+import django;django.setup()
+import json
+from uuid import uuid4
+from unittest.mock import patch,MagicMock
+from config.authentication import verified_user
+from rest_framework.exceptions import AuthenticationFailed
+uid=str(uuid4());other=str(uuid4())
+r=MagicMock();r.status=200
+with patch('config.authentication.verify_claims',return_value={'sub':uid}),patch('config.authentication.build_opener') as opener:
+ opener.return_value.open.return_value.__enter__.return_value=r
+ r.read.return_value=json.dumps({'id':other,'email':'test@example.invalid','email_confirmed_at':'2026-01-01'}).encode()
+ try:verified_user('private-token-marker')
+ except AuthenticationFailed:pass
+ else:raise AssertionError('Subject mismatch accepted')
+ r.read.return_value=json.dumps({'id':uid,'email':'test@example.invalid','email_confirmed_at':'2026-01-01'}).encode()
+ verified_user('private-token-marker');verified_user('private-token-marker')
+ assert opener.return_value.open.call_count==3
+""")

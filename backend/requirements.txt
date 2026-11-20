@@ -12,3 +12,8 @@ python-dotenv==1.2.4
 typing-extensions==4.16.0
 
 prometheus-client==0.26.0
+
+PyJWT[crypto]==2.15.1
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.12
