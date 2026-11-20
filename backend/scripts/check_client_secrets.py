@@ -2,9 +2,10 @@
 import base64,json,re,subprocess
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
-files=subprocess.run(['git','ls-files','mobile/src','mobile/.env.example','app','components','lib','.env.example'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.splitlines()
+files=subprocess.run(['git','ls-files','mobile/src','mobile/.env.example','app','components','lib','.env.example','mobile/app.json','mobile/app.config.*','mobile/eas.json','mobile/metro.config.*','next.config.*','public'],cwd=ROOT,check=True,capture_output=True,text=True).stdout.splitlines()
 for name in files:
-    text=(ROOT/name).read_text(encoding='utf-8')
+    # One-to-one decoding also scans ASCII credentials embedded in binary assets.
+    text=(ROOT/name).read_bytes().decode('latin-1')
     if re.search(r'sb_secret_[A-Za-z0-9_-]{12,}',text):raise SystemExit('Privileged Supabase key in client source: '+name)
     for token in re.findall(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+',text):
         try:claims=json.loads(base64.urlsafe_b64decode(token.split('.')[1]+'==='))
