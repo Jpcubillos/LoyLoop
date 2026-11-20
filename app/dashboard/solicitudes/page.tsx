@@ -1,10 +1,11 @@
 "use client";
+import { backendClient } from "@/lib/backend/client";
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, ClipboardList, Store } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
 
-const db = supabase as any;
+
+
 
 type Lead = {
   id: string;
@@ -27,37 +28,21 @@ export default function SolicitudesPage() {
   const [message, setMessage] = useState("");
 
   const reload = useCallback(async () => {
-    const { data: approver, error: accessError } = await db
-      .from("platform_business_approvers")
-      .select("user_id")
-      .limit(1);
-    if (accessError || !approver?.length) {
-      setLoading(false);
-      setMessage("Tu cuenta aún no tiene autorización para revisar solicitudes de comercios.");
-      return;
-    }
-    const { data, error } = await db
-      .from("business_leads")
-      .select("id, owner_name, business_name, email, phone, city, category, message, status, business_id, created_at")
-      .order("created_at", { ascending: false });
-    setLoading(false);
-    if (error) setMessage(error.message);
-    else setLeads(data ?? []);
+    try { setLeads(await backendClient<Lead[]>("/platform/business-leads/")); }
+    catch { setLeads([]); setMessage("Tu cuenta no tiene acceso o no pudimos cargar las solicitudes."); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => { void reload(); }, [reload]);
 
   async function approve(lead: Lead) {
-    setApproving(lead.id);
-    setMessage("");
-    const { error } = await db.rpc("approve_business_lead", { p_lead_id: lead.id });
-    setApproving(null);
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-    setMessage(`${lead.business_name} ya aparece en el catálogo de la app móvil.`);
-    await reload();
+    setApproving(lead.id);setMessage("");
+    try {
+      await backendClient(`/platform/business-leads/${lead.id}/approve/`,"POST",{});
+      setMessage(`${lead.business_name} ya aparece en el catalogo de la app movil.`);
+      await reload();
+    } catch { setMessage("No pudimos publicar el comercio. Revisa tus permisos e intenta nuevamente."); }
+    finally { setApproving(null); }
   }
 
   return (

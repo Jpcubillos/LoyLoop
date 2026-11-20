@@ -1,0 +1,68 @@
+# Overlay for compose.staging.yaml. UI ports are loopback only.
+services:
+  alert-receiver:
+    image: python:3.12-slim@sha256:05a994d2344eb364cc186910f4fc8786a38215f39f00d0acc25bff33a08f4177
+    platform: linux/amd64
+    user: '10001:10001'
+    command: [python, -u, /app/alert_receiver.py]
+    volumes:
+      - ./scripts/alert_receiver.py:/app/alert_receiver.py:ro
+    secrets: [metrics_token]
+    networks: [staging]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+  prometheus:
+    image: prom/prometheus:v3.16.0@sha256:89c1a644817e9ad70fa2af76c84898e327c1de7063735f962e8313b1e28672c3
+    platform: linux/amd64
+    command: [--config.file=/etc/prometheus/prometheus.yaml, --storage.tsdb.retention.time=24h, --storage.tsdb.retention.size=128MB]
+    ports: [127.0.0.1:19090:9090]
+    volumes:
+      - ./docker/observability:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    secrets: [staging_ca, metrics_token]
+    networks: [staging]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+  alertmanager:
+    image: prom/alertmanager:v0.35.0@sha256:0f6727a39ff00b6cf95e8a5ebaf7442c55af855b79c689fb9a060e2bada1ecbf
+    platform: linux/amd64
+    command: [--config.file=/etc/alertmanager/alertmanager.yaml, --storage.path=/alertmanager]
+    ports: [127.0.0.1:19093:9093]
+    volumes:
+      - ./docker/observability/alertmanager.yaml:/etc/alertmanager/alertmanager.yaml:ro
+      - alertmanager_data:/alertmanager
+    secrets: [staging_ca, metrics_token]
+    networks: [staging]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+  blackbox:
+    image: prom/blackbox-exporter:v0.29.1@sha256:66eae352a79e6f677aeddd8c25a9bdb017586dc5fbd230f22329213d891f94bd
+    platform: linux/amd64
+    command: [--config.file=/etc/blackbox/blackbox.yaml]
+    volumes:
+      - ./docker/observability/blackbox.yaml:/etc/blackbox/blackbox.yaml:ro
+    secrets: [staging_ca]
+    networks: [staging]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+volumes:
+  prometheus_data:
+  alertmanager_data:
+secrets:
+  metrics_token:
+    file: .docker/staging-metrics-token

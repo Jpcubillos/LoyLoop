@@ -1,0 +1,92 @@
+rule_files: [alerts.yaml]
+evaluation_interval: 5s
+tests:
+  - interval: 5s
+    input_series:
+      - series: 'probe_success{job="loyloop-probes",instance="https://proxy/ready/"}'
+        values: '1 1 0+0x20'
+    alert_rule_test:
+      - eval_time: 15s
+        alertname: LoyLoopReadinessDown
+        exp_alerts: []
+      - eval_time: 45s
+        alertname: LoyLoopReadinessDown
+        exp_alerts:
+          - exp_labels:
+              job: loyloop-probes
+              instance: https://proxy/ready/
+              severity: critical
+            exp_annotations:
+              summary: Django cannot serve database-backed operations
+
+  - interval: 5s
+    input_series:
+      - series: 'probe_success{job="loyloop-probes",instance="https://proxy/ready/"}'
+        values: '0+0x12 1+0x12'
+    alert_rule_test:
+      - eval_time: 35s
+        alertname: LoyLoopReadinessDown
+        exp_alerts:
+          - exp_labels:
+              job: loyloop-probes
+              instance: https://proxy/ready/
+              severity: critical
+            exp_annotations:
+              summary: Django cannot serve database-backed operations
+      - eval_time: 90s
+        alertname: LoyLoopReadinessDown
+        exp_alerts: []
+  - interval: 5s
+    input_series:
+      - series: 'probe_success{job="loyloop-probes",instance="https://proxy/health/"}'
+        values: '0+0x12'
+      - series: 'up{job="loyloop-django"}'
+        values: '0+0x12'
+    alert_rule_test:
+      - eval_time: 35s
+        alertname: LoyLoopLivenessDown
+        exp_alerts:
+          - exp_labels:
+              job: loyloop-probes
+              instance: https://proxy/health/
+              severity: critical
+            exp_annotations:
+              summary: Django liveness check failed
+      - eval_time: 35s
+        alertname: LoyLoopMetricsDown
+        exp_alerts:
+          - exp_labels:
+              job: loyloop-django
+              severity: warning
+            exp_annotations:
+              summary: Django metrics scrape failed
+  - interval: 5s
+    input_series:
+      - series: 'loyloop_http_requests_total{status="500"}'
+        values: '0+10x120'
+      - series: 'loyloop_http_requests_total{status="200"}'
+        values: '0+90x120'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: LoyLoopHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: More than five percent of HTTP requests fail
+  - interval: 5s
+    input_series:
+      - series: 'loyloop_http_duration_seconds_bucket{le="1"}'
+        values: '0+0x150'
+      - series: 'loyloop_http_duration_seconds_bucket{le="3"}'
+        values: '0+100x150'
+      - series: 'loyloop_http_duration_seconds_bucket{le="+Inf"}'
+        values: '0+100x150'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: LoyLoopHighLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: HTTP p95 latency exceeds two seconds

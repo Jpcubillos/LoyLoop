@@ -1,0 +1,79 @@
+name: loyloop-django
+
+services:
+  api:
+    platform: linux/amd64
+    image: loyloop-django:local
+    build:
+      context: .
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.docker
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_DEBUG: 'false'
+      DJANGO_TRUST_PROXY_SSL_HEADER: 'true'
+      DJANGO_SECURE_SSL_REDIRECT: 'true'
+      DATABASE_CONFIG_FILE: /run/secrets/backend_env
+      DB_SSLMODE: verify-full
+      DB_SSLROOTCERT: /run/secrets/supabase_ca
+    secrets:
+      - backend_env
+      - supabase_ca
+    networks:
+      - application
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 384m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, scripts/container_health.py]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+  proxy:
+    image: caddy:2-alpine@sha256:fc9cbc100585871d18d4e451cca7021785c90a7006087427ae5ceb3e4efe6424
+    platform: linux/amd64
+    ports:
+      - 127.0.0.1:8443:443
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - proxy_data:/data
+      - proxy_config:/config
+    networks:
+      - application
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+  # Use explicit commands only; startup never applies database migrations.
+
+networks:
+  application:
+
+volumes:
+  proxy_data:
+  proxy_config:
+
+secrets:
+  backend_env:
+    file: ${LOYLOOP_BACKEND_ENV_FILE:-.env}
+  supabase_ca:
+    file: supabase-ca.crt

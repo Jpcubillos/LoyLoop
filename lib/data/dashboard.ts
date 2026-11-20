@@ -1,3 +1,4 @@
+import { usesDjango, dashboardBusiness as backendBusiness } from "@/lib/backend/server";
 import { supabase } from "@/lib/supabase/client";
 import {
   campaigns as fallbackCampaigns,
@@ -68,12 +69,14 @@ export type BusinessSettings = {
 };
 
 export async function getCafeCentral() {
+  const selected = usesDjango ? await backendBusiness() : null;
   const { data, error } = await db
     .from("businesses")
     .select("*")
-    .eq("slug", "cafe-central")
+    .eq(selected ? "id" : "slug", selected?.id ?? "cafe-central")
     .maybeSingle();
 
+  if (usesDjango && error) throw new Error("No pudimos cargar el comercio.");
   if (error || !data) return null;
   return data;
 }
@@ -163,10 +166,11 @@ function toDateTimeInput(value?: string | null) {
 }
 
 async function getCafeCentralForOffers() {
+  const selected = usesDjango ? await backendBusiness() : null;
   const { data, error } = await db
     .from("businesses")
     .select("*")
-    .eq("slug", "cafe-central")
+    .eq(selected ? "id" : "slug", selected?.id ?? "cafe-central")
     .maybeSingle();
 
   if (error) throw error;

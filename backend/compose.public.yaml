@@ -1,0 +1,44 @@
+# Optional temporary HTTPS transport. No inbound router port is opened.
+services:
+  tunnel:
+    image: cloudflare/cloudflared:latest@sha256:bf723075c9a1a35e785bdcac0e8420f504e8074cc65784ed03300b8219aafadc
+    platform: linux/amd64
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --protocol
+      - http2
+      - --metrics
+      - 127.0.0.1:2000
+      - --url
+      - https://proxy:443
+      - --http-host-header
+      - localhost
+      - --origin-server-name
+      - localhost
+      - --origin-ca-pool
+      - /run/secrets/proxy_ca
+    secrets:
+      - proxy_ca
+    networks:
+      - application
+    depends_on:
+      proxy:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+
+secrets:
+  proxy_ca:
+    file: .docker/local-proxy-ca.crt

@@ -1,0 +1,38 @@
+groups:
+  - name: loyloop
+    rules:
+      - alert: LoyLoopReadinessDown
+        expr: probe_success{job="loyloop-probes",instance="https://proxy/ready/"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: Django cannot serve database-backed operations
+      - alert: LoyLoopLivenessDown
+        expr: probe_success{job="loyloop-probes",instance="https://proxy/health/"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: Django liveness check failed
+      - alert: LoyLoopMetricsDown
+        expr: up{job="loyloop-django"} == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: Django metrics scrape failed
+      - alert: LoyLoopHighErrorRate
+        expr: sum(rate(loyloop_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(loyloop_http_requests_total[5m])), 0.001) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than five percent of HTTP requests fail
+      - alert: LoyLoopHighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(loyloop_http_duration_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HTTP p95 latency exceeds two seconds

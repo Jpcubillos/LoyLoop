@@ -1,41 +1,14 @@
-import { NextResponse } from "next/server";
-import { validateClaimRequest } from "@/lib/claims";
+import { NextResponse } from 'next/server';
+import { BackendError } from '@/lib/backend/server';
+import { validateClaimRequest } from '@/lib/claims';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders
-  });
-}
-
-export async function POST(request: Request) {
+export async function POST(request:Request) {
+  if(request.headers.get('origin')!==new URL(request.url).origin) return NextResponse.json({ok:false},{status:403});
   try {
-    const body = await request.json();
-    const code = String(body.code ?? "");
-
-    if (!code.trim()) {
-      return NextResponse.json(
-        { ok: false, message: "Ingresa un codigo." },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    const result = await validateClaimRequest(code, body.businessSlug ?? "cafe-central");
-    return NextResponse.json(result, {
-      status: result.ok ? 200 : 400,
-      headers: corsHeaders
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo validar el QR.";
-    return NextResponse.json(
-      { ok: false, message },
-      { status: 500, headers: corsHeaders }
-    );
+    const body=await request.json();
+    const result=await validateClaimRequest(String(body.code??''));
+    return NextResponse.json(result,{headers:{'Cache-Control':'no-store'}});
+  } catch(error) {
+    return NextResponse.json({ok:false,message:'No pudimos completar la accion.'},{status:error instanceof BackendError?error.status:400});
   }
 }

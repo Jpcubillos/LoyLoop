@@ -1,3 +1,4 @@
+import { usesDjango, dashboardBusiness as backendBusiness, backendRequest } from "@/lib/backend/server";
 import { supabase } from "@/lib/supabase/client";
 
 const db = supabase as any;
@@ -43,6 +44,11 @@ const fallbackUsers: AppUser[] = [
 ];
 
 export async function getAppUsers(): Promise<AppUser[]> {
+  if (usesDjango) {
+    const business=await backendBusiness();
+    const rows=await backendRequest<{id:string;email:string;full_name:string;business_role:AppUser["businessRole"];active:boolean}[]>(`/businesses/${business.id}/staff/`);
+    return rows.map(user=>({id:user.id,email:user.email,fullName:user.full_name,accountType:"business",businessRole:user.business_role,customerSegment:null,active:user.active}));
+  }
   const { data, error } = await db
     .from("app_users")
     .select("id, email, full_name, account_type, business_role, customer_segment, active")

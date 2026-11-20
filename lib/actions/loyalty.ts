@@ -1,4 +1,6 @@
 "use server";
+import { backendBusiness, backendRequest } from "@/lib/backend/server";
+import { writeOffer } from "@/lib/backend/offers";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -6,54 +8,13 @@ import { supabase } from "@/lib/supabase/client";
 
 const db = supabase as any;
 
-function isMissingSchemaError(error: unknown) {
-  const message = error instanceof Error ? error.message : JSON.stringify(error);
-  return message.includes("PGRST205") || message.includes("Could not find the table");
-}
 
-function logDemoBackendWarning(action: string, error: unknown) {
-  if (isMissingSchemaError(error)) {
-    console.warn(`[LoyLoop demo] ${action} skipped because Supabase schema is not installed yet.`);
-    return;
-  }
 
-  console.error(`[LoyLoop demo] ${action} failed`, error);
-}
+function logDemoBackendWarning(action: string, _error: unknown) { console.error(`[LoyLoop] ${action} failed`); }
 
-async function getOrCreateDemoCustomer() {
-  const email = "juan@loyloop.app";
-  const existing = await db
-    .from("customer_profiles")
-    .select("*")
-    .eq("email", email)
-    .maybeSingle();
 
-  if (existing.data) return existing.data;
 
-  const { data, error } = await db
-    .from("customer_profiles")
-    .insert({
-      full_name: "Juan Perez",
-      phone: "+573001234567",
-      email
-    })
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-async function getBusiness(slug = "cafe-central") {
-  const { data, error } = await db
-    .from("businesses")
-    .select("*")
-    .eq("slug", slug)
-    .single();
-
-  if (error) throw error;
-  return data;
-}
+async function getBusiness() { return backendBusiness(); }
 
 function readNonNegativeInteger(formData: FormData, field: string, fallback = 0, minimum = 0) {
   const raw = String(formData.get(field) ?? "").trim();
@@ -106,7 +67,7 @@ async function persist_createReward(formData: FormData) {
 
     if (!name) throw new Error("El nombre es obligatorio.");
 
-    const { error } = await db.from("rewards").insert({
+    const { error } = await (writeOffer("rewards", "POST", {
       business_id: business.id,
       name,
       type,
@@ -115,7 +76,7 @@ async function persist_createReward(formData: FormData) {
       credit_amount_cents: type === "credit" && creditAmount > 0 ? creditAmount : null,
       audience_segment: audienceSegment,
       active: true
-    });
+    }));
 
     if (error) throw error;
     revalidatePath("/dashboard/recompensas");
@@ -138,17 +99,14 @@ async function persist_updateReward(formData: FormData) {
 
     if (!id || !name) throw new Error("El nombre es obligatorio.");
 
-    const { error } = await db
-      .from("rewards")
-      .update({
+    const { error } = await (writeOffer("rewards", "PATCH", {
         name,
         type,
         description,
         points_required: points > 0 ? points : null,
         credit_amount_cents: type === "credit" && creditAmount > 0 ? creditAmount : null,
         audience_segment: audienceSegment
-      })
-      .eq("id", id);
+      }, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/recompensas");
@@ -164,7 +122,7 @@ async function persist_deleteReward(formData: FormData) {
     const id = String(formData.get("id") ?? "");
     if (!id) throw new Error("No encontramos el registro.");
 
-    const { error } = await db.from("rewards").delete().eq("id", id);
+    const { error } = await (writeOffer("rewards", "DELETE", {}, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/recompensas");
@@ -188,7 +146,7 @@ async function persist_createMission(formData: FormData) {
 
     if (!name) throw new Error("El nombre es obligatorio.");
 
-    const { error } = await db.from("missions").insert({
+    const { error } = await (writeOffer("missions", "POST", {
       business_id: business.id,
       name,
       category,
@@ -200,7 +158,7 @@ async function persist_createMission(formData: FormData) {
       starts_at: schedule.startsAt,
       ends_at: schedule.endsAt,
       active: true
-    });
+    }));
 
     if (error) throw error;
     revalidatePath("/dashboard/misiones");
@@ -223,9 +181,7 @@ async function persist_updateMission(formData: FormData) {
 
     if (!id || !name) throw new Error("El nombre es obligatorio.");
 
-    const { error } = await db
-      .from("missions")
-      .update({
+    const { error } = await (writeOffer("missions", "PATCH", {
         name,
         category,
         description,
@@ -235,8 +191,7 @@ async function persist_updateMission(formData: FormData) {
         duration_type: schedule.durationType,
         starts_at: schedule.startsAt,
         ends_at: schedule.endsAt
-      })
-      .eq("id", id);
+      }, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/misiones");
@@ -265,7 +220,7 @@ async function persist_createCampaign(formData: FormData) {
       throw new Error("La promoción debe entregar al menos 1 punto.");
     }
 
-    const { error } = await db.from("campaigns").insert({
+    const { error } = await (writeOffer("campaigns", "POST", {
       business_id: business.id,
       name,
       type,
@@ -278,7 +233,7 @@ async function persist_createCampaign(formData: FormData) {
       ends_at: schedule.endsAt,
       status: schedule.startsAt && new Date(schedule.startsAt).getTime() > Date.now() ? "scheduled" : "active",
       active: true
-    });
+    }));
 
     if (error) throw error;
     revalidatePath("/dashboard/campanas");
@@ -307,9 +262,7 @@ async function persist_updateCampaign(formData: FormData) {
       throw new Error("La promoción debe entregar al menos 1 punto.");
     }
 
-    const { error } = await db
-      .from("campaigns")
-      .update({
+    const { error } = await (writeOffer("campaigns", "PATCH", {
         name,
         type,
         description,
@@ -320,8 +273,7 @@ async function persist_updateCampaign(formData: FormData) {
         starts_at: schedule.startsAt,
         ends_at: schedule.endsAt,
         status: schedule.startsAt && new Date(schedule.startsAt).getTime() > Date.now() ? "scheduled" : "active"
-      })
-      .eq("id", id);
+      }, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/campanas");
@@ -336,7 +288,7 @@ async function persist_deleteMission(formData: FormData) {
     const id = String(formData.get("id") ?? "");
     if (!id) throw new Error("No encontramos el registro.");
 
-    const { error } = await db.from("missions").delete().eq("id", id);
+    const { error } = await (writeOffer("missions", "DELETE", {}, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/misiones");
@@ -351,7 +303,7 @@ async function persist_deleteCampaign(formData: FormData) {
     const id = String(formData.get("id") ?? "");
     if (!id) throw new Error("No encontramos el registro.");
 
-    const { error } = await db.from("campaigns").delete().eq("id", id);
+    const { error } = await (writeOffer("campaigns", "DELETE", {}, id));
 
     if (error) throw error;
     revalidatePath("/dashboard/campanas");
@@ -402,160 +354,23 @@ export async function deleteCampaign(formData: FormData) {
 }
 
 export async function joinBusiness(slug = "cafe-central") {
-  try {
-    const business = await getBusiness(slug);
-    const customer = await getOrCreateDemoCustomer();
-
-    const { error: membershipError } = await db
-      .from("business_memberships")
-      .upsert({
-        business_id: business.id,
-        customer_id: customer.id,
-        points_balance: 20,
-        credit_balance_cents: 500000,
-        tier: "Nuevo"
-      }, { onConflict: "business_id,customer_id" });
-
-    if (membershipError) throw membershipError;
-
-    await db.from("stamp_cards").upsert({
-      business_id: business.id,
-      customer_id: customer.id,
-      reward_name: "Cafe gratis con 10 sellos",
-      current_stamps: 0,
-      required_stamps: 10,
-      active: true
-    }, { onConflict: "business_id,customer_id,reward_name" });
-
-    await db.from("loyalty_events").insert({
-      business_id: business.id,
-      customer_id: customer.id,
-      event_type: "join",
-      points_delta: 20,
-      credit_delta_cents: 500000,
-      metadata: { label: `Te uniste a ${business.name}` }
-    });
-
-    revalidatePath("/c");
-    revalidatePath(`/c/${slug}`);
-  } catch (error) {
-    logDemoBackendWarning("joinBusiness", error);
-  }
+  const {data,error}=await db.from("businesses").select("id").eq("slug",slug).single();
+  if(error || !data) throw new Error("No encontramos el comercio.");
+  await backendRequest(`/memberships/${data.id}/`,"POST",{});
+  revalidatePath("/c");revalidatePath(`/c/${slug}`);
 }
 
 export async function joinBusinessAction(_formData: FormData) {
   await joinBusiness("cafe-central");
 }
 
-export async function addDemoStamp(slug = "cafe-central") {
-  try {
-    const business = await getBusiness(slug);
-    const customer = await getOrCreateDemoCustomer();
-
-    const { data: card } = await db
-      .from("stamp_cards")
-      .select("*")
-      .eq("business_id", business.id)
-      .eq("customer_id", customer.id)
-      .eq("reward_name", "Cafe gratis con 10 sellos")
-      .maybeSingle();
-
-    const currentStamps = card?.current_stamps ?? 0;
-    const requiredStamps = card?.required_stamps ?? 10;
-
-    if (currentStamps >= requiredStamps) {
-      revalidatePath("/c");
-      revalidatePath(`/c/${slug}`);
-      redirect(`/c/${slug}?stamp=max`);
-    }
-
-    const nextStamps = currentStamps + 1;
-
-    await db.from("stamp_cards").upsert({
-      business_id: business.id,
-      customer_id: customer.id,
-      reward_name: "Cafe gratis con 10 sellos",
-      current_stamps: nextStamps,
-      required_stamps: requiredStamps,
-      active: true
-    }, { onConflict: "business_id,customer_id,reward_name" });
-
-    const { data: membership } = await db
-      .from("business_memberships")
-      .select("points_balance")
-      .eq("business_id", business.id)
-      .eq("customer_id", customer.id)
-      .maybeSingle();
-
-    await db
-      .from("business_memberships")
-      .upsert({
-        business_id: business.id,
-        customer_id: customer.id,
-        points_balance: (membership?.points_balance ?? 0) + 10,
-        credit_balance_cents: 500000,
-        tier: "Cliente frecuente"
-      }, { onConflict: "business_id,customer_id" });
-
-    await db.from("loyalty_events").insert({
-      business_id: business.id,
-      customer_id: customer.id,
-      event_type: "stamp",
-      points_delta: 10,
-      metadata: { label: "Sello agregado" }
-    });
-
-    revalidatePath("/c");
-    revalidatePath(`/c/${slug}`);
-  } catch (error) {
-    logDemoBackendWarning("addDemoStamp", error);
-  }
-}
+export async function addDemoStamp(_slug = "cafe-central") { throw new Error("Genera el QR y pide su validacion al comercio."); }
 
 export async function addDemoStampAction(_formData: FormData) {
   await addDemoStamp("cafe-central");
 }
 
-export async function redeemStampReward(slug = "cafe-central") {
-  try {
-    const business = await getBusiness(slug);
-    const customer = await getOrCreateDemoCustomer();
-
-    const { data: card } = await db
-      .from("stamp_cards")
-      .select("current_stamps, required_stamps")
-      .eq("business_id", business.id)
-      .eq("customer_id", customer.id)
-      .eq("reward_name", "Cafe gratis con 10 sellos")
-      .maybeSingle();
-
-    if (!card || card.current_stamps < card.required_stamps) {
-      revalidatePath("/c");
-      revalidatePath(`/c/${slug}`);
-      return;
-    }
-
-    await db
-      .from("stamp_cards")
-      .update({ current_stamps: 0 })
-      .eq("business_id", business.id)
-      .eq("customer_id", customer.id)
-      .eq("reward_name", "Cafe gratis con 10 sellos");
-
-    await db.from("loyalty_events").insert({
-      business_id: business.id,
-      customer_id: customer.id,
-      event_type: "reward_redeem",
-      points_delta: 0,
-      metadata: { label: "Cafe gratis redimido" }
-    });
-
-    revalidatePath("/c");
-    revalidatePath(`/c/${slug}`);
-  } catch (error) {
-    logDemoBackendWarning("redeemStampReward", error);
-  }
-}
+export async function redeemStampReward(_slug = "cafe-central") { throw new Error("Genera el QR y pide su validacion al comercio."); }
 
 export async function redeemStampRewardAction(_formData: FormData) {
   await redeemStampReward("cafe-central");

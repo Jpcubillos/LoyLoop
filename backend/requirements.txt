@@ -5,3 +5,10 @@ django-cors-headers==4.9.0
 djangorestframework==3.17.2
 sqlparse==0.6.1
 tzdata==2026.6
+
+psycopg[binary,pool]==3.3.9
+psycopg-pool==3.3.3
+python-dotenv==1.2.4
+typing-extensions==4.16.0
+
+prometheus-client==0.26.0

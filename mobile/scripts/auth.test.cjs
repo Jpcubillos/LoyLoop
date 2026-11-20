@@ -59,7 +59,11 @@ function fixture(overrides = {}, rpcError = null) {
       return { data: "customer-one", error: rpcError };
     },
   };
-  return { service: createCustomerAuth(client, true), calls, client };
+  return { service: createCustomerAuth(client, true, client.auth, async () => {
+    const result=await client.rpc("ensure_loyloop_customer_identity");
+    if(result.error) throw result.error;
+    return result.data;
+  }), calls, client };
 }
 
 test("normalizes identity email without altering passwords", async () => {
@@ -335,4 +339,12 @@ test("corrupt and incomplete sessions are removed without reviving a legacy acco
   assert.equal(secure.size, 0);
   await storage.setItem("sb-auth", "fresh login");
   assert.equal(await storage.getItem("sb-auth"), "fresh login");
+});
+
+
+test("missing backend identity adapter fails closed without invoking a legacy database RPC", async () => {
+  const {client,calls}=fixture();
+  await assert.rejects(createCustomerAuth(client,true).signIn("one@example.com","password"));
+  assert.equal(calls.some(call=>call[0]==="rpc"),false);
+  assert.equal(calls.some(call=>call[0]==="signOut"),true);
 });

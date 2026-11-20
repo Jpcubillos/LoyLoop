@@ -1,30 +1,28 @@
-# Activación y comprobación remota de LL-11
+# Activación y aceptación de LL-11 con Django
 
 ## Orden de despliegue
 
-1. En el proyecto Supabase compartido, aplicar `supabase/migrations/202610290001_customer_identity.sql` desde SQL Editor o el flujo de migraciones del equipo. La migración crea una tabla protegida de vínculos y la RPC `ensure_loyloop_customer_identity`. No necesita la migración de avatar de 20261020.
-2. Si se detiene por correos duplicados, revisar con `select lower(btrim(email)) as email_normalizado, count(*) from public.customer_profiles where email is not null group by 1 having count(*) > 1;`. Resolver cada caso preservando las relaciones de fidelidad; no borrar ni fusionar saldos automáticamente. Volver a aplicar la migración completa.
-3. En Authentication → proveedores de email, mantener registro por correo/contraseña y confirmación de correo habilitados. Configurar un mínimo de contraseña de al menos 8 caracteres; la app también valida ese mínimo. Las reglas adicionales de Supabase siguen aplicando.
-4. En Authentication → plantillas de correo, copiar `supabase/email-templates/confirm-signup.html` a **Confirm signup** y `supabase/email-templates/recovery.html` a **Reset password**. Ambas utilizan `{{ .Token }}`. Asuntos sugeridos: «Confirma tu cuenta de LoyLoop» y «Tu código para recuperar LoyLoop». La app acepta códigos numéricos de 6 a 10 dígitos. Mantener su longitud dentro de ese rango en Auth.
-5. Comprobar SMTP, remitente, caducidad y límites de envío del proyecto. El proveedor por defecto puede restringir destinatarios; configurar SMTP para usuarios reales. No se incluyen claves SMTP ni contraseñas en este repo.
-6. Publicar la app después del SQL y las plantillas. Mantener `EXPO_PUBLIC_DEMO_MODE=false` y las variables Supabase reales. Reiniciar Expo al cambiar variables. La recuperación por código no necesita un redirect de Expo Go.
+1. Utilizar el esquema de negocio adoptado mediante las ocho migraciones Django de LL-235. No reaplicar supabase/migrations/202610290001_customer_identity.sql ni restaurar la RPC como alternativa: esos archivos son históricos.
+2. Desplegar primero la API actual, incluidos customer-identity y discovery. Mantener runtime loyloop_backend separado del propietario de migraciones; el arranque no migra automáticamente. Confirmar health/readiness y pruebas de aislamiento.
+3. Configurar las variables públicas de la app: URL/clave pública Supabase Auth, URL DRF y DEMO_MODE=false. Nunca incluir credenciales DB o service_role. Reiniciar/recompilar tras cambios. No reutilizar la configuración ficticia de CI para una prueba real.
+4. En Supabase Auth comprobar correo/contraseña y confirmación habilitados, contraseña mínima y política vigentes, SMTP/remitente/límites, caducidad OTP y plantillas. La app espera código numérico de 6 a 10 dígitos; las plantillas de referencia usan {{ .Token }} en supabase/email-templates. La lectura pública de settings confirmó que el registro/email están habilitados y se exige confirmación; las plantillas/SMTP siguen sin verificación real.
+5. Ejecutar CI móvil y backend; revisar los artefactos. El smoke automatizado simula Auth y DRF, y no demuestra recepción de correos.
 
-## Comprobación manual con cuentas de prueba autorizadas
+## Prueba real preparada en PC
 
-- Registrar un correo nuevo; recibir el código; confirmar; comprobar que puede acceder. El vínculo en `customer_identities` debe tener el ID de Auth y un único `customer_id`.
-- Cerrar sesión, reiniciar la app y comprobar que no reaparecen datos de la cuenta. Iniciar sesión, reiniciar y comprobar restauración.
-- Repetir registro con un correo existente: respuesta neutral, sin indicar existencia. Probar contraseña incorrecta y correo inexistente: mismo mensaje de acceso.
-- Solicitar recuperación con correo existente e inexistente: misma respuesta. Verificar recepción real solo donde corresponda.
-- Probar código incorrecto/vencido: no cambia contraseña. Con un código válido, guardar nueva contraseña y volver al acceso sin una sesión de recuperación persistida. Verificar contraseña nueva y rechazo de la anterior.
-- Iniciar desde dos dispositivos para el mismo usuario: mismo perfil y saldos existentes, sin duplicados.
-- Comprobar SecureStore, restauración y renovación al regresar del segundo plano en iOS/Android; el navegador no cubre almacenamiento nativo.
+`python backend/scripts/run_local_runtime.py` inicia únicamente loopback 127.0.0.1:8001 con el secreto privado del rol mínimo y TLS hacia Supabase. No ejecuta migraciones. La app de pruebas reales está en http://localhost:8092/login, con la URL DRF loopback y las claves públicas reales cargadas solo en el proceso. No usar esa URL de API en un teléfono: localhost allí corresponde al propio teléfono.
 
-Las pruebas automatizadas locales no envían correos ni modifican la base remota. No marcar esta lista como verificada hasta ejecutarla contra el proyecto real. El endurecimiento de políticas heredadas de fidelidad y el backend de reclamos sigue en LL-96/LL-12; esta entrega protege específicamente la nueva tabla de identidad.
+El test simulado usa otro servidor (8091) y dominios ficticios. Mantener ambos separados. No enviar tokens de usuario mediante pruebas automatizadas al túnel Cloudflare: el recorrido operativo automatizado permanece en el origen local autorizado.
 
-## Referencias técnicas
+## Checklist con cuenta de pruebas autorizada
 
-- [Expo SDK 57](https://docs.expo.dev/versions/v57.0.0/)
-- [Supabase: autenticación por contraseña](https://supabase.com/docs/guides/auth/passwords)
-- [Supabase: verifyOtp](https://supabase.com/docs/reference/javascript/auth-verifyotp)
-- [Supabase: resetPasswordForEmail](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail)
-- [Supabase: React Native](https://supabase.com/docs/guides/auth/quickstarts/react-native)
+- Alta nueva y confirmación mediante correo recibido; identidad única en Django.
+- Repetir registro existente: respuesta neutra, sin filtrar existencia.
+- Acceso correcto; contraseña incorrecta y correo inexistente con mensaje equivalente.
+- Logout, reapertura y ausencia de información de la sesión anterior.
+- Recuperación existente/inexistente con respuesta neutra; código inválido/vencido no cambia contraseña.
+- Código válido y contraseña nueva: retorno al acceso sin sesión de recuperación persistente; acceso con la nueva y rechazo de la anterior.
+- Reintentar/bootstrap concurrente sin duplicar perfil o alterar beneficios.
+- En teléfono: SecureStore/restauración, renovación al volver al primer plano y cambio de cuenta. Registrar plataforma/versión, pasos y resultado sin datos personales.
+
+No marcar pasos como comprobados antes de realizarlos. QR/cámara/canje no se modifican en esta HU y no se añaden a este checklist como alcance nuevo. Si falta correo o acceso a dispositivo, mantener LL-11 abierta con ese pendiente explícito.

@@ -1,3 +1,4 @@
+import { usesDjango, pageRequest as backendRequest } from "@/lib/backend/server";
 import { supabase } from "@/lib/supabase/client";
 
 export type CustomerBusiness = {
@@ -14,10 +15,11 @@ function formatCredit(cents: number) {
 }
 
 export async function getCustomerBusinessesForDemo(): Promise<CustomerBusiness[]> {
+  const identity=usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}) : null;
   const { data: customer } = await supabase
     .from("customer_profiles")
     .select("id")
-    .eq("email", "juan@loyloop.app")
+    .eq(identity ? "id" : "email", identity?.customer_id ?? "juan@loyloop.app")
     .maybeSingle<{ id: string }>();
 
   if (!customer) return [];

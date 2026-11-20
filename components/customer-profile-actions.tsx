@@ -1,4 +1,5 @@
 "use client";
+import { usesDjango, syncBackendSession, backendClient } from "@/lib/backend/client";
 
 import { Bell, CreditCard, LogOut, ShieldCheck, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
@@ -12,6 +13,7 @@ const actions = [
 
 export function CustomerProfileActions() {
   async function signOut() {
+    await syncBackendSession(null);
     await supabase.auth.signOut();
     window.location.href = "/login";
   }
