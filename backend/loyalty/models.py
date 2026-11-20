@@ -123,6 +123,7 @@ class Reward(models.Model):
     type = models.TextField()
     description = models.TextField(null=True, blank=True)
     points_required = models.IntegerField(null=True, blank=True)
+    redemption_limit = models.PositiveIntegerField(null=True, blank=True)
     credit_amount_cents = models.IntegerField(null=True, blank=True)
     audience_segment = models.TextField(default='active', db_default='active')
     active = models.BooleanField(default=True, db_default=True)
@@ -173,6 +174,7 @@ class Campaign(models.Model):
     type = models.TextField()
     description = models.TextField(null=True, blank=True)
     discount_percent = models.IntegerField(null=True, blank=True)
+    redemption_limit = models.PositiveIntegerField(null=True, blank=True)
     reward_points = models.IntegerField(default=0, db_default=0)
     audience_segment = models.TextField(default='active', db_default='active')
     duration_type = models.TextField(default='indefinite', db_default='indefinite')
@@ -254,6 +256,9 @@ class ClaimRequest(models.Model):
     status = models.TextField(default='pending', db_default='pending')
     payload = models.JSONField(default=dict, db_default={})
     expires_at = models.DateTimeField()
+    manual_code_hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    idempotency_key = models.CharField(max_length=120, null=True, blank=True)
+    request_fingerprint = models.CharField(max_length=64, null=True, blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
     class Meta:
@@ -261,6 +266,7 @@ class ClaimRequest(models.Model):
         constraints = [
             models.CheckConstraint(condition=Q(action_type__in=['stamp_add', 'stamp_redeem', 'discount_redeem', 'points_boost']), name='claim_requests_action_type_check'),
             models.CheckConstraint(condition=Q(status__in=['pending', 'approved', 'rejected', 'expired']), name='claim_requests_status_check'),
+            models.UniqueConstraint(fields=['business', 'customer', 'idempotency_key'], condition=Q(idempotency_key__isnull=False), name='claims_customer_idem_uk'),
         ]
         indexes = [
             models.Index(fields=['code'], name='claim_requests_code_idx'),
@@ -292,3 +298,81 @@ class CustomerIdentity(models.Model):
     created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
     class Meta:
         db_table = 'customer_identities'
+
+
+# LL domain API v1 -- additive tables; do not rewrite pre-existing Supabase data.
+class ActivityReceipt(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=RandomUUID())
+    business = models.ForeignKey('Business', on_delete=models.CASCADE)
+    customer = models.ForeignKey('CustomerProfile', on_delete=models.CASCADE)
+    event = models.OneToOneField('LoyaltyEvent', on_delete=models.CASCADE)
+    card = models.ForeignKey('StampCard', null=True, blank=True, on_delete=models.SET_NULL)
+    reference = models.CharField(max_length=120)
+    fingerprint = models.CharField(max_length=64)
+    actor_id = models.UUIDField()
+    points_awarded = models.PositiveIntegerField(default=0)
+    stamps_awarded = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'activity_receipts'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'reference'], name='activity_tenant_reference_uk'),
+            models.CheckConstraint(condition=Q(points_awarded__gt=0) | Q(stamps_awarded__gt=0),
+                                   name='activity_nonzero_grant_ck'),
+        ]
+
+
+class IdentityChallenge(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=RandomUUID())
+    business = models.ForeignKey('Business', on_delete=models.CASCADE)
+    customer = models.ForeignKey('CustomerProfile', on_delete=models.CASCADE)
+    token_hash = models.CharField(max_length=64, unique=True)
+    manual_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    consumed_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'identity_challenges'
+        indexes = [models.Index(fields=['business', 'expires_at'], name='identity_biz_exp_idx')]
+
+
+class StampCompletion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=RandomUUID())
+    card = models.ForeignKey('StampCard', on_delete=models.CASCADE)
+    claim = models.OneToOneField('ClaimRequest', on_delete=models.CASCADE)
+    cycle_number = models.PositiveIntegerField()
+    confirmed_by = models.UUIDField()
+    created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'stamp_completions'
+        constraints = [models.UniqueConstraint(fields=['card', 'cycle_number'], name='stamp_card_cycle_uk')]
+
+
+class BusinessPlanAssignment(models.Model):
+    # Manual subscription state for MVP. Billing/prices require the later V1 HU.
+    business = models.OneToOneField('Business', primary_key=True, on_delete=models.CASCADE)
+    plan_code = models.CharField(max_length=16, choices=[(p, p) for p in ('STARTER', 'GROWTH', 'PRO')])
+    status = models.CharField(max_length=16, choices=[(p,p) for p in ('trial','active','suspended','cancelled')])
+    updated_by = models.UUIDField()
+    updated_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'business_plan_assignments'
+
+
+class RewardRedemption(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=RandomUUID())
+    reward = models.ForeignKey('Reward', on_delete=models.CASCADE)
+    claim = models.OneToOneField('ClaimRequest', on_delete=models.CASCADE)
+    business = models.ForeignKey('Business', on_delete=models.CASCADE)
+    customer = models.ForeignKey('CustomerProfile', on_delete=models.CASCADE)
+    confirmed_by = models.UUIDField()
+    created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'reward_redemptions'
+        indexes = [models.Index(fields=['reward','created_at'], name='reward_redemptions_idx')]

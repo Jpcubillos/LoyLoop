@@ -76,6 +76,7 @@ jobs:
       - run: python -m pip check
       - run: python scripts/test_postgres.py
       - run: python scripts/test_api.py
+      - run: python scripts/test_domain_api.py
 
   docker:
     runs-on: ubuntu-latest

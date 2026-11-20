@@ -16,7 +16,8 @@ def grant_runtime_access(cursor):
     cursor.execute('GRANT CONNECT ON DATABASE '+connection.ops.quote_name(connection.settings_dict['NAME'])+' TO '+ROLE)
     cursor.execute('GRANT USAGE ON SCHEMA public TO '+ROLE)
     existing=set(connection.introspection.table_names(cursor))
-    for name in sorted(TABLES & existing):
+    runtime_tables = TABLES | {'activity_receipts', 'identity_challenges', 'stamp_completions', 'business_plan_assignments', 'reward_redemptions'}
+    for name in sorted(runtime_tables & existing):
         table='public.'+connection.ops.quote_name(name)
         readonly=name=='platform_business_approvers'
         cursor.execute('GRANT '+('SELECT' if readonly else 'SELECT,INSERT,UPDATE,DELETE')+' ON '+table+' TO '+ROLE)

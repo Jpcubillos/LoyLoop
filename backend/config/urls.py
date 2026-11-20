@@ -20,3 +20,4 @@ def health(request):
 urlpatterns = [path("internal/alerts/",alerts), path("internal/metrics/",metrics), path("health/", health, name="health"), path("ready/", ready, name="ready")]
 if 'loyalty' in settings.INSTALLED_APPS and settings.BUSINESS_API_ENABLED:
     urlpatterns += [path('api/', include('loyalty.urls'))]
+    urlpatterns += [path('api/v1/', include('loyalty.v1_urls'))]

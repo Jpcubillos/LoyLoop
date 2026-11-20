@@ -97,10 +97,11 @@ class RewardSerializer(StrictSerializer):
     type = serializers.ChoiceField(choices=['discount','points','credit','product'])
     audience_segment = serializers.ChoiceField(choices=['inactive','at_risk','active','vip'],required=False)
     points_required = serializers.IntegerField(min_value=0,allow_null=True,required=False)
+    redemption_limit = serializers.IntegerField(min_value=1,allow_null=True,required=False)
     credit_amount_cents = serializers.IntegerField(min_value=0,allow_null=True,required=False)
     class Meta:
         model = Reward
-        fields = ['id','name','type','description','points_required','credit_amount_cents','audience_segment','active']
+        fields = ['id','name','type','description','points_required','credit_amount_cents','redemption_limit','audience_segment','active']
         read_only_fields = ['id']
 
 
@@ -121,11 +122,12 @@ class CampaignSerializer(StrictSerializer):
     audience_segment = serializers.ChoiceField(choices=['inactive','at_risk','active','vip'],required=False)
     duration_type = serializers.ChoiceField(choices=['indefinite','one_hour','custom'],required=False)
     discount_percent = serializers.IntegerField(min_value=1,max_value=100,allow_null=True,required=False)
+    redemption_limit = serializers.IntegerField(min_value=1,allow_null=True,required=False)
     reward_points = serializers.IntegerField(min_value=0,required=False)
     status = serializers.ChoiceField(choices=['active','scheduled','ended'],required=False)
     class Meta:
         model = Campaign
-        fields = ['id','name','type','description','discount_percent','reward_points','audience_segment','duration_type','starts_at','ends_at','status','active']
+        fields = ['id','name','type','description','discount_percent','redemption_limit','reward_points','audience_segment','duration_type','starts_at','ends_at','status','active']
         read_only_fields = ['id']
 
 
