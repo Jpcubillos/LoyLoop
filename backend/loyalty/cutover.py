@@ -17,3 +17,14 @@ def require_cutover():
             raise CutoverUnavailable()
     except DatabaseError:
         raise CutoverUnavailable() from None
+
+
+def require_domain():
+    """Fail closed if LL domain ledgers and restrictions were not migrated."""
+    require_cutover()
+    try:
+        if not MigrationRecorder(connection).migration_qs.filter(
+                app='loyalty', name='0009_domain_services').exists():
+            raise CutoverUnavailable()
+    except DatabaseError:
+        raise CutoverUnavailable() from None
