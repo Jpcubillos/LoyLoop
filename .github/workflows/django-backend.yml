@@ -29,6 +29,7 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python scripts/smoke_http.py
       - run: python scripts/check_deploy.py
+      - run: python scripts/check_client_secrets.py
       - name: Check local migration consistency
         env:
           DJANGO_SETTINGS_MODULE: config.settings.local

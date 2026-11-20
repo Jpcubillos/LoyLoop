@@ -1,8 +1,9 @@
 """Verify bearer sessions with the configured Supabase Auth server over HTTPS.
 
 No JWT payload or editable metadata is used to authorize business actions.
-Remote validation also supports the project's legacy symmetric signing keys.
+Asymmetric JWKS validation precedes the remote account check; legacy HS256 is rejected.
 """
+from config.jwt_verification import verify_claims
 from dataclasses import dataclass
 import json
 import os
@@ -46,6 +47,7 @@ def verified_user(token):
     if (url.scheme != 'https' or not url.hostname or url.username or url.password
             or url.query or url.fragment or url.path != '/auth/v1' or port not in (None, 443) or not key):
         raise AuthUnavailable()
+    claims=verify_claims(token,base)
     request = Request(base+'/user', headers={'Authorization':'Bearer '+token, 'apikey':key})
     try:
         with build_opener(NoRedirects()).open(request, timeout=5) as response:
@@ -62,6 +64,7 @@ def verified_user(token):
         raise AuthUnavailable() from None
     try:
         identifier = UUID(user['id'])
+        if str(identifier)!=claims['sub']:raise ValueError()
         email = user['email'].strip().lower()
         if not email or not user.get('email_confirmed_at') or user.get('is_anonymous'):
             raise ValueError()

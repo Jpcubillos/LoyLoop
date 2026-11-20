@@ -138,3 +138,7 @@ CI remoto con cinco jobs correctos y checks requeridos en main autorizados; obse
 ## Cierre de hallazgos LL-235/LL-244 — 2026-11-17
 
 API/CI prueban contratos con permisos loyloop_backend; staging usa login mínimo y credencial separada del mantenimiento. Verificados dos ciclos sobre el mismo socket y recuperación ante fallos reales controlados de migración/arranque. Estados privados por ejecución, imagen de rollback retenida antes del build. La auditoría y su resolución se conservan en docs/hus/LL-235-LL-244-review.md. No hay pendientes de esos tres hallazgos; merge/Jira/hosting permanente siguen siendo estados independientes.
+
+## LL-238 — 2026-11-20
+
+Django valida firma JWKS ES256/RS256 y claims exactos antes del control remoto de cuenta. HS256/none y claves de servicio no se aceptan como sesiones. Roles/tenant se resuelven en servidor y se conserva RLS con rol mínimo. Política explícita: JWT válido hasta exp, refresh revocado al logout; no revocación inmediata de access-token por suposición. Ver docs/hus/LL-238.md y backend/AUTH-API.md. Esta revisión necesita instalar las dependencias fijadas y desplegar la nueva imagen; no se declara activada en los contenedores anteriores.
