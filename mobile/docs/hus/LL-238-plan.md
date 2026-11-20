@@ -13,6 +13,6 @@ Plan:
 - [x] A?adir pruebas de rotaci?n, cach?, ca?da de JWKS y cabeceras de confianza.
 - [x] Verificar suite completa y contratos PostgreSQL con rol m?nimo.
 - [x] Comprobar JWT real localmente sin publicar tokens y el flujo cliente existente.
-- [ ] Verificar escaneo de claves, CI y evidencia final.
+- [x] Verificar escaneo de claves, CI y evidencia final.
 
 Riesgos que requieren regresi?n: claves retiradas a?n en cach? (TTL local 60 s m?s cach? del proveedor); kid aleatorio sin tormenta de refresco; indisponibilidad no concede acceso; UUID remoto distinto del sub no concede acceso; roles por correo no deben convertirse en privilegios del cliente.
