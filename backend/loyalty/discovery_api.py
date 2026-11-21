@@ -120,36 +120,69 @@ class DiscoveryView(APIView):
                     'created_at': c.created_at.isoformat() if c.created_at else None,
                 })
 
+            phase_v1 = (
+                request.query_params.get('phase') == 'v1'
+                or request.query_params.get('v1') == 'true'
+                or request.headers.get('X-LoyLoop-Phase') == 'v1'
+            )
             missions_list = []
-            for m in Mission.objects.filter(business=business, active=True).order_by('-created_at'):
-                time_eligible = (m.starts_at is None or m.starts_at <= now) and (m.ends_at is None or m.ends_at > now)
-                segment_eligible = (m.audience_segment == user_segment) if (customer and member) else False
-                eligible = bool(member and segment_eligible and time_eligible)
-                condition = f"Meta: {m.goal} {'compras registradas' if m.category=='frequency' else 'acciones'} (+{m.reward_points} pts)"
-                missions_list.append({
-                    'id': str(m.id),
-                    'business_id': str(m.business_id),
-                    'name': m.name,
-                    'category': m.category,
-                    'description': m.description,
-                    'goal': m.goal,
-                    'reward_points': m.reward_points,
-                    'audience_segment': m.audience_segment,
-                    'duration_type': m.duration_type,
-                    'starts_at': m.starts_at.isoformat() if m.starts_at else None,
-                    'ends_at': m.ends_at.isoformat() if m.ends_at else None,
-                    'active': m.active,
-                    'eligible': eligible,
-                    'condition': condition,
-                    'created_at': m.created_at.isoformat() if m.created_at else None,
-                })
+            if phase_v1:
+                for m in Mission.objects.filter(business=business, active=True).order_by('-created_at'):
+                    time_eligible = (m.starts_at is None or m.starts_at <= now) and (m.ends_at is None or m.ends_at > now)
+                    segment_eligible = (m.audience_segment == user_segment) if (customer and member) else False
+                    eligible = bool(member and segment_eligible and time_eligible)
+                    condition = f"Meta: {m.goal} {'compras registradas' if m.category=='frequency' else 'acciones'} (+{m.reward_points} pts)"
+                    missions_list.append({
+                        'id': str(m.id),
+                        'business_id': str(m.business_id),
+                        'name': m.name,
+                        'category': m.category,
+                        'description': m.description,
+                        'goal': m.goal,
+                        'reward_points': m.reward_points,
+                        'audience_segment': m.audience_segment,
+                        'duration_type': m.duration_type,
+                        'starts_at': m.starts_at.isoformat() if m.starts_at else None,
+                        'ends_at': m.ends_at.isoformat() if m.ends_at else None,
+                        'active': m.active,
+                        'eligible': eligible,
+                        'condition': condition,
+                        'created_at': m.created_at.isoformat() if m.created_at else None,
+                    })
 
             activity_list = list(LoyaltyEvent.objects.filter(
                 customer=customer, business=business,
                 event_type__in=['purchase', 'stamp', 'reward_redeem', 'mission_progress', 'minipay_payment']
             ).order_by('-created_at').values('id', 'business_id', 'event_type', 'points_delta', 'credit_delta_cents', 'metadata', 'created_at')[:20]) if customer else []
 
+            business_data = {
+                'id': str(business.id),
+                'slug': business.slug,
+                'name': business.name,
+                'category': business.category,
+                'description': business.description or '',
+                'address': business.address or '',
+                'city': business.city or '',
+                'logo_url': business.logo_url,
+                'is_available': True,
+                'is_member': bool(member),
+                'points_balance': member.points_balance if member else 0,
+                'tier': member.tier if member else 'Miembro',
+                'vip_purchase_threshold': business.vip_purchase_threshold,
+                'at_risk_days': business.at_risk_days,
+                'inactive_days': business.inactive_days,
+                'sedes': [
+                    {
+                        'id': str(business.id),
+                        'name': 'Sede Principal',
+                        'address': business.address or 'Sede Principal',
+                        'city': business.city or '',
+                    }
+                ] if business.address else [],
+            }
+
             return Response({
+                'business': business_data,
                 'stamps': stamps_data,
                 'membership': membership_data,
                 'rewards': rewards_list,

@@ -416,6 +416,23 @@ def main():
     assert disc_page.data['pagination']['page'] == 1
     assert disc_page.data['pagination']['pageSize'] == 1
 
+    # LL-120: Ficha de comercio para miembro y no miembro
+    # Inactive biz cannot be joined
+    assert client.post(f'/api/memberships/{inactive_biz.id}/', {}, format='json').status_code == 404
+
+    # Member detail query
+    detail_res = client.get(f'/api/discovery/{business.slug}/')
+    assert detail_res.status_code == 200
+    assert 'business' in detail_res.data
+    assert detail_res.data['business']['is_member'] is True
+    assert detail_res.data['business']['points_balance'] == 195
+    assert len(detail_res.data['missions']) == 0 # MVP hides missions
+
+    # V1 phase exposes missions
+    detail_v1 = client.get(f'/api/discovery/{business.slug}/?phase=v1')
+    assert detail_v1.status_code == 200
+    assert len(detail_v1.data['missions']) >= 1
+
     # Cleanup test business
     inactive_biz.delete()
 

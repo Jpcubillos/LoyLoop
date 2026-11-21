@@ -77,3 +77,14 @@ export async function updateBusinessAwardRules(formData: FormData) {
   revalidatePath("/dashboard/configuracion");
 }
 
+export async function joinBusinessAction(businessId: string) {
+  if (!businessId || !/^[0-9a-fA-F-]{36}$/.test(businessId)) {
+    throw new Error("Identificador de comercio no válido.");
+  }
+  const result = await backendRequest<{ id: string }>(`/memberships/${businessId}/`, "POST", {});
+  revalidatePath("/c");
+  revalidatePath("/c/comercios");
+  return { ok: true, membershipId: result.id };
+}
+
+

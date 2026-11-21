@@ -222,5 +222,80 @@ test('discovery catalog filters active businesses, supports search, category, pa
   assert.ok(call.url.includes('page_size=5'));
 });
 
+test('commerce profile distinguishes member and non-member, hides missions in MVP and allows joining', async () => {
+  const {state, load} = fixture();
+  state.token = 'customer-session';
+  const customerApi = load('lib/data/customer.ts');
+  const appUsers = load('lib/actions/app-users.ts');
+
+  // 1. Non-member profile
+  state.result = {
+    business: {
+      id: '50000000-0000-0000-0000-000000000005',
+      slug: 'nuevo-cafe',
+      name: 'Nuevo Cafe',
+      category: 'Cafeteria',
+      description: 'Café de especialidad',
+      address: 'Calle 100',
+      is_available: true,
+      is_member: false,
+      points_balance: 0,
+      tier: 'Miembro',
+      sedes: [{ id: '50000000-0000-0000-0000-000000000005', name: 'Sede Principal', address: 'Calle 100' }],
+    },
+    membership: null,
+    stamps: null,
+    rewards: [{ id: 'r-1', name: 'Bebida gratis', points_required: 50, eligible: false, condition: 'Requiere 50 puntos' }],
+    campaigns: [{ id: 'c-1', name: '20% off', discount_percent: 20, eligible: false }],
+    missions: [],
+    activity: []
+  };
+
+  const nonMemberProfile = await customerApi.getCommerceProfile('nuevo-cafe');
+  assert.equal(nonMemberProfile.business.isMember, false);
+  assert.equal(nonMemberProfile.membership, null);
+  assert.equal(nonMemberProfile.stamps, null);
+  assert.equal(nonMemberProfile.rewards[0].eligible, false);
+  assert.equal(nonMemberProfile.missions.length, 0); // Hidden in MVP
+  assert.equal(nonMemberProfile.business.sedes.length, 1);
+
+  // 2. Joining the commerce via joinBusinessAction
+  state.result = { id: 'mem-new' };
+  const joinResult = await appUsers.joinBusinessAction('50000000-0000-0000-0000-000000000005');
+  assert.equal(joinResult.ok, true);
+  const joinCall = state.calls.find(c => c.url === 'https://backend.example/api/memberships/50000000-0000-0000-0000-000000000005/' && c.options.method === 'POST');
+  assert.ok(joinCall);
+
+  // 3. Member profile with V1 phase
+  state.result = {
+    business: {
+      id: '50000000-0000-0000-0000-000000000005',
+      slug: 'nuevo-cafe',
+      name: 'Nuevo Cafe',
+      category: 'Cafeteria',
+      is_available: true,
+      is_member: true,
+      points_balance: 80,
+      tier: 'Frecuente',
+      sedes: [{ id: '50000000-0000-0000-0000-000000000005', name: 'Sede Principal', address: 'Calle 100' }],
+    },
+    membership: { id: 'mem-new', points_balance: 80, tier: 'Frecuente' },
+    stamps: { current_stamps: 4, required_stamps: 10, reward_name: 'Café gratis', eligible: false },
+    rewards: [{ id: 'r-1', name: 'Bebida gratis', points_required: 50, eligible: true, condition: 'Disponible' }],
+    campaigns: [{ id: 'c-1', name: '20% off', discount_percent: 20, eligible: true }],
+    missions: [{ id: 'm-1', name: 'Misión V1', goal: 3, reward_points: 30, eligible: true }],
+    activity: [{ id: 'ev-1', event_type: 'purchase', points_delta: 20 }]
+  };
+
+  const memberProfile = await customerApi.getCommerceProfile('nuevo-cafe', 'v1');
+  assert.equal(memberProfile.business.isMember, true);
+  assert.equal(memberProfile.membership?.tier, 'Frecuente');
+  assert.equal(memberProfile.business.points, 80);
+  assert.equal(memberProfile.rewards[0].eligible, true);
+  assert.equal(memberProfile.stamps?.currentStamps, 4);
+  assert.equal(memberProfile.missions.length, 1);
+});
+
+
 
 

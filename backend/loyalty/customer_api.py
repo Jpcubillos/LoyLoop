@@ -13,7 +13,7 @@ from .api import AuthenticatedView, ensure_customer
 from .domain_services import (invalid, strict, segment, eligible_campaign,
     eligible_reward, stamp_card, audit_success, issue_claim, claim_result, confirm_claim,
     preview_claim)
-from .models import Business, BusinessMembership, LoyaltyEvent, ClaimRequest
+from .models import Business, BusinessMembership, LoyaltyEvent, ClaimRequest, BusinessPlanAssignment
 from .cutover import require_domain
 
 
@@ -24,7 +24,10 @@ def audited(principal, business):
 class MembershipView(AuthenticatedView):
     def post(self, request, business_id):
         strict(request.data, [])
-        business = get_object_or_404(Business, pk=business_id)
+        inactive_biz_ids = BusinessPlanAssignment.objects.filter(
+            status__in=['suspended', 'cancelled', 'inactive']
+        ).values_list('business_id', flat=True)
+        business = get_object_or_404(Business.objects.exclude(id__in=inactive_biz_ids), pk=business_id)
         with transaction.atomic():
             customer = ensure_customer(request.user)
             membership, created = BusinessMembership.objects.get_or_create(

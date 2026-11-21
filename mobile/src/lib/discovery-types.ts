@@ -43,6 +43,13 @@ export type DiscoveryData = {
 };
 
 export type DiscoveryDetail = {
+  business?: CatalogueRow & {
+    is_available?: boolean;
+    is_member?: boolean;
+    points_balance?: number;
+    tier?: string;
+    sedes?: Array<{ id: string; name: string; address: string; city?: string }>;
+  };
   stamps: {
     id?: string;
     current_stamps: number;

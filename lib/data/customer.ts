@@ -493,3 +493,209 @@ export async function getExploreCatalog(params?: {
     }
   };
 }
+
+export type CommerceProfile = {
+  business: {
+    id: string;
+    slug: string;
+    name: string;
+    category: string;
+    description: string;
+    address: string;
+    city?: string;
+    logoUrl?: string;
+    isAvailable: boolean;
+    isMember: boolean;
+    points: number;
+    tier: string;
+    sedes: Array<{ id: string; name: string; address: string; city?: string }>;
+  };
+  membership: {
+    id: string;
+    points: number;
+    tier: string;
+    joinedAt?: string;
+  } | null;
+  stamps: {
+    currentStamps: number;
+    requiredStamps: number;
+    rewardName: string;
+    eligible: boolean;
+    condition?: string;
+  } | null;
+  rewards: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+    pointsRequired: number;
+    eligible: boolean;
+    condition: string;
+    remainingQuota?: number | null;
+  }>;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+    discountPercent?: number | null;
+    rewardPoints?: number;
+    eligible: boolean;
+    condition: string;
+    remainingQuota?: number | null;
+    alreadyRedeemed?: boolean;
+    endsAt?: string | null;
+  }>;
+  missions: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description: string;
+    goal: number;
+    rewardPoints: number;
+    eligible: boolean;
+    condition: string;
+  }>;
+  history: Array<[string, string, string]>;
+};
+
+export async function getCommerceProfile(slug: string, phase?: string): Promise<CommerceProfile> {
+  if (usesDjango) {
+    try {
+      const qs = phase ? `?phase=${encodeURIComponent(phase)}` : "";
+      const data = await backendRequest<any>(`/discovery/${slug}/${qs}`);
+      const b = data.business || {};
+      const m = data.membership;
+      const s = data.stamps;
+
+      return {
+        business: {
+          id: b.id || "biz-unknown",
+          slug: b.slug || slug,
+          name: b.name || "Comercio",
+          category: b.category || "General",
+          description: b.description || "",
+          address: b.address || "",
+          city: b.city || "",
+          logoUrl: b.logo_url,
+          isAvailable: b.is_available ?? true,
+          isMember: Boolean(b.is_member ?? m),
+          points: b.points_balance ?? m?.points_balance ?? 0,
+          tier: b.tier ?? m?.tier ?? "Miembro",
+          sedes: b.sedes || (b.address ? [{ id: b.id, name: "Sede Principal", address: b.address, city: b.city || "" }] : []),
+        },
+        membership: m ? {
+          id: m.id,
+          points: m.points_balance ?? 0,
+          tier: m.tier || "Miembro",
+          joinedAt: m.joined_at,
+        } : null,
+        stamps: s ? {
+          currentStamps: s.current_stamps ?? 0,
+          requiredStamps: s.required_stamps ?? 10,
+          rewardName: s.reward_name || "Recompensa de sellos",
+          eligible: Boolean(s.eligible),
+          condition: s.condition,
+        } : null,
+        rewards: (data.rewards || []).map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          description: r.description || "",
+          pointsRequired: r.points_required || 0,
+          eligible: Boolean(r.eligible),
+          condition: r.condition || (r.points_required ? `${r.points_required} pts requeridos (permanentes)` : "Para miembros"),
+          remainingQuota: r.remaining_quota,
+        })),
+        campaigns: (data.campaigns || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          description: c.description || "",
+          discountPercent: c.discount_percent,
+          rewardPoints: c.reward_points,
+          eligible: Boolean(c.eligible),
+          condition: c.condition || "Promoción especial",
+          remainingQuota: c.remaining_quota,
+          alreadyRedeemed: Boolean(c.already_redeemed),
+          endsAt: c.ends_at,
+        })),
+        missions: (data.missions || []).map((ms: any) => ({
+          id: ms.id,
+          name: ms.name,
+          category: ms.category,
+          description: ms.description || "",
+          goal: ms.goal || 1,
+          rewardPoints: ms.reward_points || 0,
+          eligible: Boolean(ms.eligible),
+          condition: ms.condition || `Meta: ${ms.goal}`,
+        })),
+        history: (data.activity || []).map((ev: any) => [
+          "Reciente",
+          ev.metadata?.label || ev.event_type,
+          formatEventValue(ev.points_delta || 0, ev.credit_delta_cents || 0)
+        ]),
+      };
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return {
+    business: {
+      id: "demo-cafe",
+      slug: "cafe-central",
+      name: "Cafe Central",
+      category: "Cafeteria",
+      description: "Café de especialidad, postres y recompensas para clientes frecuentes.",
+      address: "Cra. 7 #45-12, Bogotá",
+      city: "Bogotá",
+      isAvailable: true,
+      isMember: true,
+      points: 120,
+      tier: "Frecuente",
+      sedes: [{ id: "demo-cafe", name: "Sede Principal", address: "Cra. 7 #45-12, Bogotá", city: "Bogotá" }],
+    },
+    membership: {
+      id: "mem-demo",
+      points: 120,
+      tier: "Frecuente",
+    },
+    stamps: {
+      currentStamps: 6,
+      requiredStamps: 10,
+      rewardName: "Cafe gratis con 10 sellos",
+      eligible: false,
+      condition: "6/10 sellos acumulados (sellos independientes)",
+    },
+    rewards: [
+      {
+        id: "rew-1",
+        name: "Capuchino de la casa",
+        type: "product",
+        description: "Un capuchino mediano de grano especial",
+        pointsRequired: 100,
+        eligible: true,
+        condition: "Requiere 100 puntos acumulados (no se descuentan)",
+        remainingQuota: 10,
+      }
+    ],
+    campaigns: [
+      {
+        id: "camp-1",
+        name: "15% de descuento",
+        type: "discount_redeem",
+        description: "Descuento en compras mayores a $20.000",
+        discountPercent: 15,
+        eligible: true,
+        condition: "15% de descuento",
+        remainingQuota: 25,
+      }
+    ],
+    missions: [],
+    history: [
+      ["Hoy", "Visita registrada", "+15 pts"],
+      ["Ayer", "Café gratis", "Canjeado"]
+    ]
+  };
+}

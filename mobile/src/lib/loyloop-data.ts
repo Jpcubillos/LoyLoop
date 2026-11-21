@@ -374,10 +374,31 @@ function demoDetail(b: BusinessSummary): BusinessDetail {
   };
 }
 export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
-  const business = (await getBusinesses()).find((b) => b.slug === slug);
-  if (!business) throw new Error("No encontramos este comercio.");
-  if (isDemo) return demoDetail(business);
+  if (isDemo) {
+    const business = (await getBusinesses()).find((b) => b.slug === slug);
+    if (!business) throw new Error("No encontramos este comercio.");
+    return demoDetail(business);
+  }
   const result = await discoveryApi<DiscoveryDetail>(`/discovery/${slug}/`);
+  const bRow = result.business;
+  const business: BusinessSummary | undefined = bRow
+    ? {
+        id: bRow.id,
+        slug: bRow.slug,
+        name: bRow.name,
+        category: bRow.category,
+        description: bRow.description || "",
+        address: bRow.address || "",
+        logoUrl: bRow.logo_url,
+        points: bRow.points_balance ?? result.membership?.points_balance ?? 0,
+        credit: "",
+        tier: bRow.tier ?? result.membership?.tier ?? "Miembro",
+        pointsToVip: null,
+        isMember: Boolean(bRow.is_member ?? result.membership),
+        isAvailable: bRow.is_available ?? true,
+      }
+    : (await getBusinesses()).find((b) => b.slug === slug);
+  if (!business) throw new Error("No encontramos este comercio.");
   const stamps = { data: result.stamps };
   const rewards = { data: result.rewards };
   const campaigns = { data: result.campaigns };
