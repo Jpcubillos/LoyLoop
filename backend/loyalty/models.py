@@ -312,6 +312,10 @@ class ActivityReceipt(models.Model):
     actor_id = models.UUIDField()
     points_awarded = models.PositiveIntegerField(default=0)
     stamps_awarded = models.PositiveIntegerField(default=0)
+    rule_version = models.PositiveIntegerField(default=1, db_default=1)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.UUIDField(null=True, blank=True)
+    reversal_reason = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
 
     class Meta:
@@ -376,3 +380,26 @@ class RewardRedemption(models.Model):
     class Meta:
         db_table = 'reward_redemptions'
         indexes = [models.Index(fields=['reward','created_at'], name='reward_redemptions_idx')]
+
+
+class BusinessAwardRule(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, db_default=RandomUUID())
+    business = models.ForeignKey('Business', on_delete=models.CASCADE, db_column='business_id')
+    points_per_purchase = models.PositiveIntegerField(default=10, db_default=10)
+    stamps_per_purchase = models.PositiveIntegerField(default=1, db_default=1)
+    stamps_enabled = models.BooleanField(default=True, db_default=True)
+    min_purchase_cents = models.PositiveIntegerField(default=0, db_default=0)
+    version = models.PositiveIntegerField(default=1, db_default=1)
+    effective_from = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+    active = models.BooleanField(default=True, db_default=True)
+    created_at = models.DateTimeField(default=timezone.now, db_default=TransactionNow())
+
+    class Meta:
+        db_table = 'business_award_rules'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'version'], name='award_rules_business_version_uk'),
+        ]
+        indexes = [
+            models.Index(fields=['business', '-version'], name='award_rules_biz_ver_idx'),
+        ]
+

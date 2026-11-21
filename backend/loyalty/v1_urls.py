@@ -3,7 +3,8 @@ from django.urls import path
 from .v1_api import (MyProfileView, BusinessCatalogView, MyMembershipsView,
     MerchantMembershipsView, MyPointsView, MerchantPointsView,
     MyStampCardsView, MerchantStampCardsView, IdentityIssueView,
-    IdentityVerifyView, PlanCatalogView, BusinessPlanView, PlatformOverviewView)
+    IdentityVerifyView, PlanCatalogView, BusinessPlanView, PlatformOverviewView,
+    BusinessAwardRulesView, ReverseActivityView)
 from .api import SessionView, CustomerIdentityView, OffersView
 from .customer_api import MembershipView, V1ClaimsView, ValidateClaimView, PreviewClaimView
 from .admin_api import PublicLeadView, LeadsView, SegmentationView, StaffView
@@ -21,6 +22,8 @@ urlpatterns=[
     path('me/account/deletion-check/',AccountDeletionCheckView.as_view()),
     path('businesses/',BusinessCatalogView.as_view()),
     path('businesses/<uuid:business_id>/',BusinessCatalogView.as_view()),
+    path('businesses/<uuid:business_id>/award-rules/',BusinessAwardRulesView.as_view()),
+    path('businesses/<uuid:business_id>/activities/<uuid:receipt_id>/reverse/',ReverseActivityView.as_view()),
     path('businesses/<uuid:business_id>/memberships/',MerchantMembershipsView.as_view()),
     path('businesses/<uuid:business_id>/activities/',MerchantPointsView.as_view()),
     path('businesses/<uuid:business_id>/stamps/',MerchantStampCardsView.as_view()),

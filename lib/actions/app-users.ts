@@ -53,3 +53,27 @@ export async function updateBusinessProfile(formData:FormData) {
   revalidatePath('/dashboard/configuracion');
   revalidatePath('/dashboard');
 }
+
+export async function updateBusinessAwardRules(formData: FormData) {
+  const business = await backendBusiness();
+  const pointsPerPurchase = Number(formData.get("points_per_purchase") ?? 10);
+  const stampsPerPurchase = Number(formData.get("stamps_per_purchase") ?? 1);
+  const stampsEnabled = formData.get("stamps_enabled") === "on" || formData.get("stamps_enabled") === "true";
+  const minPurchaseCents = Number(formData.get("min_purchase_cents") ?? 0);
+
+  if (!Number.isInteger(pointsPerPurchase) || pointsPerPurchase < 0) {
+    throw new Error("Los puntos por compra deben ser un número entero mayor o igual a 0.");
+  }
+  if (!Number.isInteger(stampsPerPurchase) || stampsPerPurchase < 0) {
+    throw new Error("Los sellos por compra deben ser un número entero mayor o igual a 0.");
+  }
+
+  await backendRequest(`/businesses/${business.id}/award-rules/`, "PUT", {
+    pointsPerPurchase,
+    stampsPerPurchase,
+    stampsEnabled,
+    minPurchaseCents,
+  });
+  revalidatePath("/dashboard/configuracion");
+}
+

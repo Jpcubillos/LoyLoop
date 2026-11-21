@@ -23,7 +23,7 @@ from config.authentication import Principal
 from loyalty.models import (ActivityReceipt, AppUser, Business, BusinessMembership,
     BusinessPlanAssignment, Campaign, CampaignRedemption, ClaimRequest, CustomerIdentity,
     CustomerProfile, IdentityChallenge, LoyaltyEvent, PlatformBusinessApprover,
-    Reward, StampCard, StampCompletion, RewardRedemption)
+    Reward, StampCard, StampCompletion, RewardRedemption, BusinessAwardRule)
 
 assert connection.settings_dict['NAME'] == 'loyloop_ll235'
 assert connection.settings_dict['HOST'] == '127.0.0.1'
@@ -54,7 +54,7 @@ def main():
             cursor.execute('SELECT 1 FROM pg_roles WHERE rolname=%s',[role])
             if cursor.fetchone() is None:
                 cursor.execute('CREATE ROLE '+role+' NOLOGIN')
-        for table in ('activity_receipts','identity_challenges','stamp_completions','business_plan_assignments','reward_redemptions'):
+        for table in ('activity_receipts','identity_challenges','stamp_completions','business_plan_assignments','reward_redemptions','business_award_rules'):
             cursor.execute('SELECT has_table_privilege(%s,%s,%s)', ['authenticated','public.'+table,'INSERT'])
             assert cursor.fetchone()[0] is False
             cursor.execute('SELECT has_table_privilege(%s,%s,%s)', ['loyloop_backend','public.'+table,'INSERT'])
@@ -295,6 +295,85 @@ def main():
     # Activity only reflects confirmed events, no unvalidated/phantom claims
     for ev in disc_data['activity']:
         assert ev['event_type'] in {'purchase', 'stamp', 'reward_redeem', 'mission_progress'}
+
+    # LL-18: Configurable, versioned award rules, idempotent granting, level advancement and audited reversal
+    award_url = f'/api/v1/businesses/{business.id}/award-rules/'
+    client.force_authenticate(actors['customer'])
+    assert client.get(award_url).status_code == 403
+    assert client.put(award_url, {'pointsPerPurchase': 20, 'stampsPerPurchase': 1, 'stampsEnabled': True, 'minPurchaseCents': 0}, format='json').status_code == 403
+
+    client.force_authenticate(actors['owner'])
+    default_rules = client.get(award_url)
+    assert default_rules.status_code == 200
+    assert default_rules.data['pointsPerPurchase'] == 10 and default_rules.data['version'] == 1
+
+    # Update to version 2
+    update_res = client.put(award_url, {
+        'pointsPerPurchase': 25,
+        'stampsPerPurchase': 2,
+        'stampsEnabled': True,
+        'minPurchaseCents': 0
+    }, format='json')
+    assert update_res.status_code == 200, update_res.data
+    assert update_res.data['version'] == 2
+    assert update_res.data['pointsPerPurchase'] == 25
+
+    # Awarding an activity inherits active rule version 2 and updates local tier
+    client.force_authenticate(actors['cashier'])
+    membership.refresh_from_db()
+    prev_points = membership.points_balance  # 195
+    act_data = {'membershipId': str(membership.id), 'pointsAwarded': 25, 'stampsAdded': 0, 'reason': 'Rule-based purchase'}
+    act_res = client.post(activity_url, act_data, format='json', HTTP_IDEMPOTENCY_KEY='receipt-v2-001')
+    assert act_res.status_code == 201, act_res.data
+    assert act_res.data['ruleVersion'] == 2
+    receipt_id = act_res.data['id']
+
+    membership.refresh_from_db()
+    assert membership.points_balance == prev_points + 25  # 220
+    assert membership.tier == 'Frecuente'
+
+    # Updating rule to version 3 does NOT rewrite historical receipts or points
+    client.force_authenticate(actors['owner'])
+    v3_res = client.put(award_url, {
+        'pointsPerPurchase': 50,
+        'stampsPerPurchase': 1,
+        'stampsEnabled': True,
+        'minPurchaseCents': 0
+    }, format='json')
+    assert v3_res.status_code == 200
+    assert v3_res.data['version'] == 3
+
+    # Historical receipt remains version 2 with 25 points
+    old_receipt = ActivityReceipt.objects.get(pk=receipt_id)
+    assert old_receipt.rule_version == 2
+    assert old_receipt.points_awarded == 25
+    membership.refresh_from_db()
+    assert membership.points_balance == 220
+
+    # Exceptional reversal audited, decrements points, but is NEVER presented as a points redemption
+    reverse_url = f'/api/v1/businesses/{business.id}/activities/{receipt_id}/reverse/'
+    client.force_authenticate(actors['customer'])
+    assert client.post(reverse_url, {'reason': 'Ticket anulado por error de caja'}, format='json').status_code == 403
+
+    client.force_authenticate(actors['owner'])
+    rev_res = client.post(reverse_url, {'reason': 'Ticket anulado por error de caja'}, format='json')
+    assert rev_res.status_code == 200, rev_res.data
+    assert rev_res.data['ok'] is True
+
+    # Reversal cannot be repeated
+    assert client.post(reverse_url, {'reason': 'Ticket anulado por error de caja'}, format='json').status_code == 409
+
+    # Reversal event is purchase adjustment, NOT reward_redeem
+    reversal_event = LoyaltyEvent.objects.filter(business=business, metadata__reversed_receipt_id=str(receipt_id)).first()
+    assert reversal_event is not None
+    assert reversal_event.event_type == 'purchase'
+    assert reversal_event.event_type != 'reward_redeem'
+    assert reversal_event.points_delta == -25
+    assert reversal_event.metadata['reversal'] is True
+
+    # Membership points correctly decremented back to 195
+    membership.refresh_from_db()
+    assert membership.points_balance == 195
 
     # SQL account closure must also cascade the NEW domain ledger rows.
     # Old Django-only on_delete would have blocked the Supabase SQL function.

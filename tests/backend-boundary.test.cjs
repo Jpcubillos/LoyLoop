@@ -154,3 +154,25 @@ test('discovery endpoint requires valid route format and propagates customer ses
   assert.equal(call.options.headers.Authorization,'Bearer customer-session');
 });
 
+test('award rules update uses the server-authorized tenant and validates non-negative integers',async()=>{
+  const {state,load}=fixture();state.token='private-session';
+  const id='40000000-0000-0000-0000-000000000004';
+  state.result={business_id:id,active:true,businesses:[{id,slug:'my-biz',name:'My Biz',role:'owner'}]};
+  const appUsers=load('lib/actions/app-users.ts');
+  const formData=new Map([
+    ['points_per_purchase','15'],['stamps_per_purchase','2'],['stamps_enabled','on'],['min_purchase_cents','0']
+  ]);
+  const fakeFormData={get:(k)=>formData.get(k)};
+  await appUsers.updateBusinessAwardRules(fakeFormData);
+  const putCall=state.calls.find(c=>c.url===`https://backend.example/api/businesses/${id}/award-rules/`&&c.options.method==='PUT');
+  assert.ok(putCall);
+  const body=JSON.parse(putCall.options.body);
+  assert.equal(body.pointsPerPurchase,15);
+  assert.equal(body.stampsPerPurchase,2);
+  assert.equal(body.stampsEnabled,true);
+
+  const invalidFormData={get:(k)=>k==='points_per_purchase'?'-5':formData.get(k)};
+  await assert.rejects(appUsers.updateBusinessAwardRules(invalidFormData),/Los puntos por compra deben ser un número entero mayor o igual a 0/);
+});
+
+

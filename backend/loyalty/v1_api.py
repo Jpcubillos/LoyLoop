@@ -16,10 +16,11 @@ from .admin_api import approver
 from .api import AuthenticatedView, ensure_customer
 from .cutover import require_domain
 from .domain_services import (invalid, strict, record_confirmed_activity,
-    activity_result, issue_identification, consume_identification, audit_success)
+    activity_result, issue_identification, consume_identification, audit_success,
+    get_active_award_rule, set_business_award_rule, reverse_confirmed_activity)
 from .models import (ActivityReceipt, Business, BusinessMembership,
     BusinessPlanAssignment, CustomerProfile, IdentityChallenge, LoyaltyEvent,
-    PlatformBusinessApprover, StampCard, StampCompletion)
+    PlatformBusinessApprover, StampCard, StampCompletion, BusinessAwardRule)
 
 
 class DomainView(AuthenticatedView):
@@ -158,10 +159,10 @@ class MerchantPointsView(DomainView):
         strict(request.data, ['membershipId','pointsAwarded','stampsAdded','stampCardId','reason'])
         class Activity(serializers.Serializer):
             membershipId = serializers.UUIDField()
-            pointsAwarded = serializers.IntegerField(min_value=0, max_value=100000)
-            stampsAdded = serializers.IntegerField(min_value=0,max_value=20,default=0)
-            stampCardId = serializers.UUIDField(required=False,allow_null=True)
-            reason = serializers.CharField(min_length=5,max_length=200,trim_whitespace=True)
+            pointsAwarded = serializers.IntegerField(min_value=0, max_value=100000, required=False, allow_null=True)
+            stampsAdded = serializers.IntegerField(min_value=0, max_value=20, default=0, required=False, allow_null=True)
+            stampCardId = serializers.UUIDField(required=False, allow_null=True)
+            reason = serializers.CharField(min_length=5, max_length=200, trim_whitespace=True)
         serializer = Activity(data=request.data)
         serializer.is_valid(raise_exception=True)
         key = request.headers.get('Idempotency-Key')
@@ -170,16 +171,72 @@ class MerchantPointsView(DomainView):
         value = serializer.validated_data
         receipt, created = record_confirmed_activity(business=business,
             membership_id=value['membershipId'], actor_id=request.user.id, reference=key,
-            points=value['pointsAwarded'], stamps=value['stampsAdded'],
+            points=value.get('pointsAwarded'), stamps=value.get('stampsAdded'),
             card_id=value.get('stampCardId'), reason=value['reason'])
-        return Response(activity_result(receipt),status=201 if created else 200)
+        return Response(activity_result(receipt), status=201 if created else 200)
 
     def get(self, request, business_id):
-        business = business_for(request.user,business_id,{'owner','manager'})
+        business = business_for(request.user, business_id, {'owner','manager'})
         rows = ActivityReceipt.objects.filter(business=business).order_by('-created_at','id')[:100]
-        return Response([{'id':str(row.id), 'membershipCustomerId':str(row.customer_id),
-                          'pointsAwarded':row.points_awarded,'stampsAwarded':row.stamps_awarded,
-                          'createdAt':row.created_at.isoformat()} for row in rows])
+        return Response([{'id': str(row.id), 'membershipCustomerId': str(row.customer_id),
+                          'pointsAwarded': row.points_awarded, 'stampsAwarded': row.stamps_awarded,
+                          'ruleVersion': row.rule_version,
+                          'reversed': bool(row.reversed_at),
+                          'reversedAt': row.reversed_at.isoformat() if row.reversed_at else None,
+                          'reversalReason': row.reversal_reason,
+                          'createdAt': row.created_at.isoformat()} for row in rows])
+
+
+class BusinessAwardRulesView(DomainView):
+    def get(self, request, business_id):
+        business = business_for(request.user, business_id, {'owner','manager','cashier'})
+        rule = get_active_award_rule(business)
+        return Response({
+            'pointsPerPurchase': rule.points_per_purchase,
+            'stampsPerPurchase': rule.stamps_per_purchase,
+            'stampsEnabled': rule.stamps_enabled,
+            'minPurchaseCents': rule.min_purchase_cents,
+            'version': rule.version,
+            'effectiveFrom': rule.effective_from.isoformat() if rule.effective_from else None,
+        })
+
+    def put(self, request, business_id):
+        business = business_for(request.user, business_id, {'owner','manager'})
+        strict(request.data, ['pointsPerPurchase','stampsPerPurchase','stampsEnabled','minPurchaseCents'])
+        class AwardRuleInput(serializers.Serializer):
+            pointsPerPurchase = serializers.IntegerField(min_value=0, max_value=100000)
+            stampsPerPurchase = serializers.IntegerField(min_value=0, max_value=20)
+            stampsEnabled = serializers.BooleanField(default=True)
+            minPurchaseCents = serializers.IntegerField(min_value=0, default=0, required=False)
+        s = AwardRuleInput(data=request.data)
+        s.is_valid(raise_exception=True)
+        val = s.validated_data
+        rule = set_business_award_rule(
+            business=business,
+            points_per_purchase=val['pointsPerPurchase'],
+            stamps_per_purchase=val['stampsPerPurchase'],
+            stamps_enabled=val['stampsEnabled'],
+            min_purchase_cents=val.get('minPurchaseCents', 0),
+            actor_id=request.user.id
+        )
+        return Response({
+            'ok': True,
+            'pointsPerPurchase': rule.points_per_purchase,
+            'stampsPerPurchase': rule.stamps_per_purchase,
+            'stampsEnabled': rule.stamps_enabled,
+            'minPurchaseCents': rule.min_purchase_cents,
+            'version': rule.version,
+            'effectiveFrom': rule.effective_from.isoformat() if rule.effective_from else None,
+        })
+
+
+class ReverseActivityView(DomainView):
+    def post(self, request, business_id, receipt_id):
+        business = business_for(request.user, business_id, {'owner','manager'})
+        strict(request.data, ['reason'])
+        reason = request.data.get('reason', '')
+        result = reverse_confirmed_activity(business=business, receipt_id=receipt_id, actor_id=request.user.id, reason=reason)
+        return Response(result, status=200)
 
 
 class MyStampCardsView(DomainView):
