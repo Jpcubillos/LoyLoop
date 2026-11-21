@@ -363,4 +363,57 @@ def confirm_claim(*, business, code, actor_id):
     claim.approved_at = timezone.now()
     claim.save(update_fields=['status','approved_at'])
     audit_success(actor_id, business.id)
-    return {'ok':True,'message':'Validacion aplicada correctamente.','httpStatus':200}
+    return {'ok':True,'message':'Validacion aplicada correctamente.','httpStatus':200,
+            'customerName': claim.customer.full_name, 'actionType': claim.action_type}
+
+
+def preview_claim(*, business, code):
+    if not isinstance(code, str) or not 1 <= len(code.strip()) <= 128:
+        invalid('Ingresa un codigo valido.')
+    normalized = code.strip().upper()
+    claim = ClaimRequest.objects.filter(code=normalized, business=business).first()
+    if claim is None and normalized.isdigit() and len(normalized) == 16:
+        claim = ClaimRequest.objects.filter(manual_code_hash=_digest(normalized), business=business).first()
+    if claim is None:
+        from django.http import Http404
+        raise Http404()
+    if claim.status != 'pending':
+        raise Conflict('Este codigo ya fue procesado.')
+    if claim.expires_at <= timezone.now():
+        claim.status = 'expired'
+        claim.save(update_fields=['status'])
+        raise Conflict('El codigo ha expirado.')
+
+    membership = BusinessMembership.objects.filter(business=business, customer_id=claim.customer_id).first()
+    if not membership:
+        invalid('El cliente no es miembro de este comercio.')
+
+    benefit_title = 'Beneficio'
+    detail = ''
+    if claim.action_type in {'stamp_add', 'stamp_redeem'}:
+        card = stamp_card(business, claim.customer, create=False)
+        benefit_title = 'Sumar sello' if claim.action_type == 'stamp_add' else 'Redimir tarjeta'
+        detail = f"{card.current_stamps}/{card.required_stamps} sellos ({card.reward_name})"
+    elif claim.action_type == 'discount_redeem' and claim.payload.get('rewardId'):
+        reward = eligible_reward(business, claim.customer, claim.payload['rewardId'], membership.points_balance)
+        benefit_title = reward.name
+        detail = reward.description or f"Recompensa ({reward.type})"
+    else:
+        campaign = eligible_campaign(business, claim.customer, claim.action_type, claim.payload.get('campaignId'))
+        benefit_title = campaign.name
+        detail = f"{campaign.discount_percent}% de descuento" if campaign.discount_percent else f"+{campaign.reward_points} puntos"
+
+    return {
+        'ok': True,
+        'claimId': str(claim.id),
+        'code': claim.code,
+        'customerName': claim.customer.full_name,
+        'customerId': str(claim.customer.id),
+        'actionType': claim.action_type,
+        'benefitTitle': benefit_title,
+        'detail': detail,
+        'expiresAt': claim.expires_at.isoformat(),
+        'status': claim.status,
+        'canConfirm': True,
+    }
+

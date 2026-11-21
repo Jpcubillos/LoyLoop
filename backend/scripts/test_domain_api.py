@@ -141,8 +141,18 @@ def main():
         'businessSlug':'domain-fixture','payload':{}},format='json',HTTP_IDEMPOTENCY_KEY='claim-test-001').status_code==409
     client.force_authenticate(actors['cashier'])
     route=f'/api/v1/businesses/{business.id}/validate-claim/'
+    preview_route=f'/api/v1/businesses/{business.id}/claims/preview/'
+    preview=client.post(preview_route,{'code':claim.data['manualCode']},format='json')
+    assert preview.status_code==200,preview.data
+    assert preview.data['customerName']=='Customer' and preview.data['canConfirm'] is True
+    membership.refresh_from_db();card.refresh_from_db()
+    assert membership.points_balance==195 and card.current_stamps==10
+    client.force_authenticate(actors['customer'])
+    assert client.post(preview_route,{'code':claim.data['manualCode']},format='json').status_code==403
+    client.force_authenticate(actors['cashier'])
     assert client.post(route,{'code':claim.data['manualCode']},format='json').status_code==200
     assert client.post(route,{'code':claim.data['code']},format='json').status_code==409
+    assert client.post(preview_route,{'code':claim.data['manualCode']},format='json').status_code==409
     membership.refresh_from_db();card.refresh_from_db()
     assert membership.points_balance==195 and card.current_stamps==0
     assert StampCompletion.objects.filter(card=card).count()==1

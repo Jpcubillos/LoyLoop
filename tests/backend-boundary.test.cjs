@@ -96,3 +96,20 @@ test('dashboard root does not grant cashier or manager access to owner settings'
   assert.equal(can('/dashboard/configuracion','manager'),false);
   assert.equal(can('/dashboard/configuracion','owner'),true);
 });
+
+test('claim preview and validation use the server-authorized tenant and reject cross-origin requests',async()=>{
+  const {state,load}=fixture();state.token='private-session';
+  const id='20000000-0000-0000-0000-000000000002';
+  state.result={business_id:id,active:true,businesses:[{id,slug:'test-cafe',name:'Test Cafe',role:'cashier'}]};
+  const claims=load('lib/claims.ts');
+  await claims.previewClaimRequest('CLAIM-CODE-123');
+  const previewCall=state.calls.find(c=>c.url===`https://backend.example/api/businesses/${id}/claims/preview/`);
+  assert.ok(previewCall);
+  assert.equal(JSON.parse(previewCall.options.body).code,'CLAIM-CODE-123');
+
+  const previewRoute=load('app/api/claim-requests/preview/route.ts');
+  const crossOrigin=new Request('https://admin.example/api/claim-requests/preview',{
+    method:'POST',headers:{Origin:'https://malicious.example'},body:JSON.stringify({code:'CLAIM-123'})
+  });
+  assert.equal((await previewRoute.POST(crossOrigin)).status,403);
+});

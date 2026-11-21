@@ -5,7 +5,7 @@ from .v1_api import (MyProfileView, BusinessCatalogView, MyMembershipsView,
     MyStampCardsView, MerchantStampCardsView, IdentityIssueView,
     IdentityVerifyView, PlanCatalogView, BusinessPlanView, PlatformOverviewView)
 from .api import SessionView, CustomerIdentityView, OffersView
-from .customer_api import MembershipView, V1ClaimsView, ValidateClaimView
+from .customer_api import MembershipView, V1ClaimsView, ValidateClaimView, PreviewClaimView
 from .admin_api import PublicLeadView, LeadsView, SegmentationView, StaffView
 from .profile_api import AccountDeletionCheckView, AccountView
 from .discovery_api import DiscoveryView
@@ -25,6 +25,7 @@ urlpatterns=[
     path('businesses/<uuid:business_id>/activities/',MerchantPointsView.as_view()),
     path('businesses/<uuid:business_id>/stamps/',MerchantStampCardsView.as_view()),
     path('businesses/<uuid:business_id>/identify/',IdentityVerifyView.as_view()),
+    path('businesses/<uuid:business_id>/claims/preview/',PreviewClaimView.as_view()),
     path('businesses/<uuid:business_id>/validate-claim/',ValidateClaimView.as_view()),
     path('businesses/<uuid:business_id>/plan/',BusinessPlanView.as_view()),
     path('businesses/<uuid:business_id>/segmentation/',SegmentationView.as_view()),

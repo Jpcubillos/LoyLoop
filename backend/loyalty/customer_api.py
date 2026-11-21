@@ -11,7 +11,8 @@ from .throttles import PrincipalScopedThrottle
 from .access import business_for
 from .api import AuthenticatedView, ensure_customer
 from .domain_services import (invalid, strict, segment, eligible_campaign,
-    eligible_reward, stamp_card, audit_success, issue_claim, claim_result, confirm_claim)
+    eligible_reward, stamp_card, audit_success, issue_claim, claim_result, confirm_claim,
+    preview_claim)
 from .models import Business, BusinessMembership, LoyaltyEvent, ClaimRequest
 from .cutover import require_domain
 
@@ -67,6 +68,18 @@ class ValidateClaimView(AuthenticatedView):
         strict(request.data, ['code'])
         result = confirm_claim(business=business, code=request.data.get('code'), actor_id=request.user.id)
         return Response({'ok':result['ok'], 'message':result['message']}, status=result['httpStatus'])
+
+
+class PreviewClaimView(AuthenticatedView):
+    throttle_classes = [PrincipalScopedThrottle]
+    throttle_scope = 'loyloop_validation'
+
+    def post(self, request, business_id):
+        require_domain()
+        business = business_for(request.user, business_id, {'owner','manager','cashier'})
+        strict(request.data, ['code'])
+        result = preview_claim(business=business, code=request.data.get('code'))
+        return Response(result, status=200)
 
 
 class V1ClaimsView(ClaimsView):

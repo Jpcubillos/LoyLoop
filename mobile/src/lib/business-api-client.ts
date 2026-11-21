@@ -5,7 +5,7 @@ export function createBusinessApi(
   transport: typeof fetch = fetch,
   publicDiscovery = false,
 ) {
-  return async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  return async function request<T>(path: string, method = "GET", body?: unknown, customHeaders?: Record<string, string>): Promise<T> {
     let base: URL;
     try { base = new URL(baseUrl); } catch { throw new Error("El servicio de LoyLoop no esta configurado."); }
     if (base.username || base.password || base.search || base.hash || base.pathname !== "/" ||
@@ -20,7 +20,7 @@ export function createBusinessApi(
     try {
       const response = await transport(`${base.origin}/api${path}`, {
         method, signal: controller.signal,
-        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json" },
+        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json", ...(customHeaders ?? {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       if (!response.ok) {

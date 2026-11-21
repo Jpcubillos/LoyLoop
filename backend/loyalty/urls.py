@@ -2,7 +2,7 @@ from .discovery_api import DiscoveryView
 from django.urls import path
 from .api import SessionView, CustomerIdentityView, OffersView
 
-from .customer_api import MembershipView, ClaimsView, ValidateClaimView
+from .customer_api import MembershipView, ClaimsView, ValidateClaimView, PreviewClaimView
 
 from .admin_api import PublicLeadView, LeadsView, SegmentationView, StaffView
 
@@ -23,6 +23,7 @@ urlpatterns = [
     path("memberships/<uuid:business_id>/",MembershipView.as_view()),
     path("claim-requests/",ClaimsView.as_view()),
     path("claim-requests/<str:code>/",ClaimsView.as_view()),
+    path("businesses/<uuid:business_id>/claims/preview/",PreviewClaimView.as_view()),
     path("businesses/<uuid:business_id>/validate-claim/",ValidateClaimView.as_view()),
     path('session/',SessionView.as_view()),
     path('customer-identity/',CustomerIdentityView.as_view()),
