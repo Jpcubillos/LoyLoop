@@ -19,6 +19,7 @@ export type BusinessSummary = {
   tier: string;
   pointsToVip: number | null;
   isMember: boolean;
+  isAvailable?: boolean;
   rating?: number;
   distance?: number;
   sponsored?: boolean;
@@ -180,7 +181,13 @@ export function nextCommerceTier(points: number) {
 async function customerId() {
   return currentCustomerId();
 }
-export async function getBusinesses(): Promise<BusinessSummary[]> {
+export async function getBusinesses(params?: {
+  query?: string;
+  category?: string;
+  membership?: "all" | "member";
+  page?: number;
+  pageSize?: number;
+}): Promise<BusinessSummary[]> {
   if (isDemo) {
     const joined: string[] = JSON.parse(
       (await AsyncStorage.getItem("loyloop.demo.memberships")) || "[]",
@@ -188,9 +195,18 @@ export async function getBusinesses(): Promise<BusinessSummary[]> {
     return fallbackBusinesses.map((b) => ({
       ...b,
       isMember: b.isMember || joined.includes(b.slug),
+      isAvailable: true,
     }));
   }
-  const result = await discoveryApi<DiscoveryData>("/discovery/");
+  const queryParts: string[] = [];
+  if (params?.query) queryParts.push(`q=${encodeURIComponent(params.query)}`);
+  if (params?.category && params.category !== "Todos") queryParts.push(`category=${encodeURIComponent(params.category)}`);
+  if (params?.membership === "member") queryParts.push("membership=member");
+  if (params?.page) queryParts.push(`page=${params.page}`);
+  if (params?.pageSize) queryParts.push(`page_size=${params.pageSize}`);
+  const qs = queryParts.length ? `?${queryParts.join("&")}` : "";
+
+  const result = await discoveryApi<DiscoveryData>(`/discovery/${qs}`);
   const catalog = { data: result.catalog };
   const memberships = { data: result.memberships };
   const activity = { data: result.activity };
@@ -234,6 +250,7 @@ export async function getBusinesses(): Promise<BusinessSummary[]> {
       tier: membership?.tier || "Miembro",
       pointsToVip: null,
       isMember: !!membership,
+      isAvailable: (b as any).is_available ?? true,
       customerSegment,
     };
   });

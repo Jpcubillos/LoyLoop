@@ -375,6 +375,50 @@ def main():
     membership.refresh_from_db()
     assert membership.points_balance == 195
 
+    # LL-117: Discovery catalog with search, category filter, pagination, inactive exclusion, and membership distinction
+    inactive_biz = Business.objects.create(slug='biz-suspended', name='Negocio Suspendido', category='Cafeteria')
+    BusinessPlanAssignment.objects.create(business=inactive_biz, plan_code='STARTER', status='suspended', updated_by=actors['owner'].id)
+
+    # Anonymous discovery
+    anon_client = DRFClient()
+    disc_anon = anon_client.get('/api/discovery/')
+    assert disc_anon.status_code == 200
+    biz_slugs = [b['slug'] for b in disc_anon.data['catalog']]
+    assert 'biz-suspended' not in biz_slugs
+    assert business.slug in biz_slugs
+    # Inactive biz directly accessed returns 404
+    assert anon_client.get('/api/discovery/biz-suspended/').status_code == 404
+
+    # Authenticated customer discovery distinguishes membership
+    client.force_authenticate(actors['customer'])
+    disc_auth = client.get('/api/discovery/')
+    assert disc_auth.status_code == 200
+    cat_item = next(b for b in disc_auth.data['catalog'] if b['slug'] == business.slug)
+    assert cat_item['is_member'] is True
+    assert cat_item['points_balance'] == 195
+    assert cat_item['is_available'] is True
+
+    # Search filter
+    disc_search = client.get(f'/api/discovery/?q={business.name[:4]}')
+    assert disc_search.status_code == 200
+    assert any(b['slug'] == business.slug for b in disc_search.data['catalog'])
+
+    # Category filter
+    disc_cat = client.get(f'/api/discovery/?category={business.category}')
+    assert disc_cat.status_code == 200
+    assert all(b['category'] == business.category for b in disc_cat.data['catalog'])
+
+    # Pagination
+    disc_page = client.get('/api/discovery/?page=1&page_size=1')
+    assert disc_page.status_code == 200
+    assert len(disc_page.data['catalog']) <= 1
+    assert 'pagination' in disc_page.data
+    assert disc_page.data['pagination']['page'] == 1
+    assert disc_page.data['pagination']['pageSize'] == 1
+
+    # Cleanup test business
+    inactive_biz.delete()
+
     # SQL account closure must also cascade the NEW domain ledger rows.
     # Old Django-only on_delete would have blocked the Supabase SQL function.
     with connection.cursor() as cursor:

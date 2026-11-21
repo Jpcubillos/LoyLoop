@@ -10,11 +10,11 @@ export function createBusinessApi(
     try { base = new URL(baseUrl); } catch { throw new Error("El servicio de LoyLoop no esta configurado."); }
     if (base.username || base.password || base.search || base.hash || base.pathname !== "/" ||
       (base.protocol !== "https:" && !(base.protocol === "http:" && ["localhost", "127.0.0.1"].includes(base.hostname))) ||
-      !/^\/[a-zA-Z0-9_/-]+\/$/.test(path)) {
+      !/^\/[a-zA-Z0-9_/-]+\/(?:\?[a-zA-Z0-9_=&%-]*)?$/.test(path)) {
       throw new Error("La direccion del servicio de LoyLoop no es valida.");
     }
     const accessToken = await token();
-    if (!accessToken && !(publicDiscovery && method === "GET" && /^\/discovery\/(?:[a-zA-Z0-9_-]+\/)?$/.test(path))) throw new Error("Inicia sesion para continuar.");
+    if (!accessToken && !(publicDiscovery && method === "GET" && /^\/discovery\/(?:[a-zA-Z0-9_-]+\/)?(?:\?[a-zA-Z0-9_=&%-]*)?$/.test(path))) throw new Error("Inicia sesion para continuar.");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {

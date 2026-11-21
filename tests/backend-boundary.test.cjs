@@ -175,4 +175,52 @@ test('award rules update uses the server-authorized tenant and validates non-neg
   await assert.rejects(appUsers.updateBusinessAwardRules(invalidFormData),/Los puntos por compra deben ser un número entero mayor o igual a 0/);
 });
 
+test('discovery catalog filters active businesses, supports search, category, pagination and isolates memberships', async () => {
+  const {state, load} = fixture();
+  state.token = 'customer-session';
+  const customerApi = load('lib/data/customer.ts');
+
+  state.result = {
+    catalog: [
+      {
+        id: 'biz-1',
+        slug: 'cafe-central',
+        name: 'Cafe Central',
+        category: 'Cafeteria',
+        description: 'Especialidad',
+        address: 'Cra 7',
+        is_available: true,
+        is_member: true,
+        points_balance: 150,
+        tier: 'Frecuente',
+      }
+    ],
+    pagination: {
+      page: 1,
+      pageSize: 5,
+      total: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    },
+    rewards: [{ business_id: 'biz-1', name: 'Cafe gratis' }],
+    campaigns: [{ business_id: 'biz-1', name: '10% desc' }]
+  };
+
+  const result = await customerApi.getExploreCatalog({ search: 'Cafe', category: 'Cafeteria', page: 1, pageSize: 5 });
+  assert.equal(result.items.length, 1);
+  assert.equal(result.items[0].name, 'Cafe Central');
+  assert.equal(result.items[0].isMember, true);
+  assert.equal(result.items[0].points, 150);
+  assert.equal(result.pagination.total, 1);
+
+  const call = state.calls.find(c => c.url.includes('/api/discovery/'));
+  assert.ok(call);
+  assert.ok(call.url.includes('search=Cafe'));
+  assert.ok(call.url.includes('category=Cafeteria'));
+  assert.ok(call.url.includes('page=1'));
+  assert.ok(call.url.includes('page_size=5'));
+});
+
+
 

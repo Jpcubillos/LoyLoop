@@ -364,3 +364,132 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
       : fallback.history
   };
 }
+
+export type ExploreBusiness = {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  description: string;
+  address: string;
+  city?: string;
+  logoUrl?: string;
+  isAvailable: boolean;
+  isMember: boolean;
+  points: number;
+  tier: string;
+  benefit?: string;
+  distance?: string;
+};
+
+export type ExploreCatalogResult = {
+  items: ExploreBusiness[];
+  categories: string[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+};
+
+export async function getExploreCatalog(params?: {
+  search?: string;
+  category?: string;
+  tab?: "all" | "memberships";
+  page?: number;
+  pageSize?: number;
+}): Promise<ExploreCatalogResult> {
+  const search = params?.search?.trim() ?? "";
+  const category = params?.category?.trim() ?? "";
+  const tab = params?.tab ?? "all";
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 10;
+
+  if (usesDjango) {
+    try {
+      const queryParts: string[] = [];
+      if (search) queryParts.push(`search=${encodeURIComponent(search)}`);
+      if (category && category !== "Todos") queryParts.push(`category=${encodeURIComponent(category)}`);
+      if (tab === "memberships") queryParts.push("membership=member");
+      queryParts.push(`page=${page}`);
+      queryParts.push(`page_size=${pageSize}`);
+      const qs = queryParts.length ? `?${queryParts.join("&")}` : "";
+
+      const data = await backendRequest<any>(`/discovery/${qs}`);
+      const catalog = data.catalog ?? [];
+      const rewards = data.rewards ?? [];
+      const campaigns = data.campaigns ?? [];
+
+      const items: ExploreBusiness[] = catalog.map((b: any) => {
+        const reward = rewards.find((r: any) => r.business_id === b.id);
+        const campaign = campaigns.find((c: any) => c.business_id === b.id);
+        const benefit = campaign?.name || reward?.name || (b.is_member ? `${b.points_balance} pts acumulados` : "Únete al comercio");
+
+        return {
+          id: b.id,
+          slug: b.slug,
+          name: b.name,
+          category: b.category,
+          description: b.description || "",
+          address: b.address || "",
+          city: b.city || "",
+          logoUrl: b.logo_url,
+          isAvailable: b.is_available ?? true,
+          isMember: Boolean(b.is_member),
+          points: b.points_balance ?? 0,
+          tier: b.tier || "Miembro",
+          benefit,
+          distance: "Cerca de ti"
+        };
+      });
+
+      const categories = ["Todos", ...Array.from(new Set(catalog.map((c: any) => c.category).filter(Boolean))) as string[]];
+
+      return {
+        items,
+        categories,
+        pagination: data.pagination ?? {
+          page,
+          pageSize,
+          total: items.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        }
+      };
+    } catch {
+      // return fallback
+    }
+  }
+
+  return {
+    items: [
+      {
+        id: "demo-cafe",
+        slug: "cafe-central",
+        name: "Cafe Central",
+        category: "Cafeteria",
+        description: "Café de especialidad, postres y recompensas para clientes frecuentes.",
+        address: "Cra. 7 #45-12, Bogotá",
+        isAvailable: true,
+        isMember: true,
+        points: 120,
+        tier: "Frecuente",
+        benefit: "$5.000 credito",
+        distance: "350 m"
+      }
+    ],
+    categories: ["Todos", "Cafeteria"],
+    pagination: {
+      page: 1,
+      pageSize,
+      total: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    }
+  };
+}

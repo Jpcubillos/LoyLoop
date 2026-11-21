@@ -1,6 +1,7 @@
 """Read models for discovery; private progress is always scoped to verified identity."""
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -10,7 +11,7 @@ from .cutover import require_cutover
 from .domain_services import segment
 from .models import (Business, BusinessMembership, LoyaltyEvent, Reward,
                      Campaign, Mission, StampCard, CustomerMission,
-                     RewardRedemption, CampaignRedemption)
+                     RewardRedemption, CampaignRedemption, BusinessPlanAssignment)
 
 
 class DiscoveryView(APIView):
@@ -23,8 +24,12 @@ class DiscoveryView(APIView):
         customer = ensure_customer(request.user) if request.user and request.user.is_authenticated else None
         now = timezone.now()
 
+        inactive_biz_ids = BusinessPlanAssignment.objects.filter(
+            status__in=['suspended', 'cancelled', 'inactive']
+        ).values_list('business_id', flat=True)
+
         if slug:
-            business = get_object_or_404(Business, slug=slug)
+            business = get_object_or_404(Business.objects.exclude(id__in=inactive_biz_ids), slug=slug)
             member = BusinessMembership.objects.filter(customer=customer, business=business).first() if customer else None
             user_segment = segment(business, customer) if (customer and member) else None
             member_points = member.points_balance if member else 0
@@ -154,11 +159,73 @@ class DiscoveryView(APIView):
                 'activity': activity_list,
             })
 
+        qs = Business.objects.exclude(id__in=inactive_biz_ids)
+
+        q = (request.query_params.get('q') or request.query_params.get('search') or '').strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(category__icontains=q) | Q(description__icontains=q))
+
+        category = (request.query_params.get('category') or '').strip()
+        if category and category.lower() not in ('all', 'todos'):
+            qs = qs.filter(category__iexact=category)
+
+        member_map = {
+            m.business_id: m for m in BusinessMembership.objects.filter(customer=customer)
+        } if customer else {}
+
+        membership_filter = (request.query_params.get('membership') or '').strip().lower()
+        if membership_filter == 'member':
+            qs = qs.filter(id__in=list(member_map.keys())) if customer else qs.none()
+        elif membership_filter == 'non_member':
+            qs = qs.exclude(id__in=list(member_map.keys())) if customer else qs
+
+        qs = qs.order_by('name', 'id')
+
+        total = qs.count()
+        try:
+            page = max(1, int(request.query_params.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = max(1, min(int(request.query_params.get('page_size', 20)), 100))
+        except (ValueError, TypeError):
+            page_size = 20
+
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+        offset = (page - 1) * page_size
+        paginated_qs = qs[offset:offset + page_size]
+
+        catalog_data = []
+        for b in paginated_qs:
+            m = member_map.get(b.id)
+            catalog_data.append({
+                'id': str(b.id),
+                'slug': b.slug,
+                'name': b.name,
+                'category': b.category,
+                'description': b.description or '',
+                'address': b.address or '',
+                'city': b.city or '',
+                'logo_url': b.logo_url,
+                'is_available': True,
+                'is_member': bool(m),
+                'points_balance': m.points_balance if m else 0,
+                'tier': m.tier if m else 'Miembro',
+                'vip_purchase_threshold': b.vip_purchase_threshold,
+                'at_risk_days': b.at_risk_days,
+                'inactive_days': b.inactive_days,
+            })
+
         return Response({
-            'catalog': list(Business.objects.order_by('-created_at', 'id').values(
-                'id', 'slug', 'name', 'category', 'description', 'address', 'logo_url',
-                'vip_purchase_threshold', 'at_risk_days', 'inactive_days'
-            )),
+            'catalog': catalog_data,
+            'pagination': {
+                'page': page,
+                'pageSize': page_size,
+                'total': total,
+                'totalPages': total_pages,
+                'hasNext': offset + page_size < total,
+                'hasPrev': page > 1,
+            },
             'memberships': list(BusinessMembership.objects.filter(customer=customer).values('business_id', 'points_balance', 'tier')) if customer else [],
             'activity': list(LoyaltyEvent.objects.filter(
                 customer=customer,
