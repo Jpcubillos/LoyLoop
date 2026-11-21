@@ -433,6 +433,18 @@ def main():
     assert detail_v1.status_code == 200
     assert len(detail_v1.data['missions']) >= 1
 
+    # LL-123: Benefits catalog in discovery classifies rewards and campaigns with calculated eligibility
+    assert 'rewards' in disc_auth.data
+    assert 'campaigns' in disc_auth.data
+    assert len(disc_auth.data['missions']) == 0 # MVP hides missions
+    if len(disc_auth.data['rewards']) > 0:
+        r_item = disc_auth.data['rewards'][0]
+        assert 'condition' in r_item
+        assert 'eligible' in r_item
+        assert 'business_name' in r_item
+    disc_benefits_v1 = client.get('/api/discovery/?phase=v1')
+    assert disc_benefits_v1.status_code == 200
+
     # Cleanup test business
     inactive_biz.delete()
 

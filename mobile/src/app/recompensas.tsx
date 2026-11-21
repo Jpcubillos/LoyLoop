@@ -26,9 +26,14 @@ const load = async () => ({
   offers: await getRewards(),
   profile: await getUserProfile(),
 });
-const tabs = ["Todos", "Recompensas", "Promociones", "Misiones"] as const;
+const isV1 = process.env.EXPO_PUBLIC_LOYLOOP_PHASE === "v1";
+const mvpTabs = ["Todos", "Recompensas", "Promociones"] as const;
+const v1Tabs = ["Todos", "Recompensas", "Promociones", "Misiones"] as const;
+type TabType = (typeof v1Tabs)[number];
+
 export default function BeneficiosScreen() {
-  const [tab, setTab] = useState<(typeof tabs)[number]>("Todos");
+  const tabs = isV1 ? v1Tabs : mvpTabs;
+  const [tab, setTab] = useState<TabType>("Todos");
   const [sort, setSort] = useState<SortOrder>("Disponibles primero");
   const { data, error, loading, reload } = useResource(load);
   const offers = (data?.offers ?? [])
@@ -112,7 +117,7 @@ export default function BeneficiosScreen() {
           {data && <LevelBenefitCard profile={data.profile} />}
         </>
       )}
-      {(tab === "Todos" || tab === "Misiones") && (
+      {isV1 && (tab === "Todos" || tab === "Misiones") && (
         <View style={{ gap: 12 }}>
           <SectionHeader
             title="Misiones en curso"

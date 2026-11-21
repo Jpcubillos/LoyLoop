@@ -249,6 +249,102 @@ class DiscoveryView(APIView):
                 'inactive_days': b.inactive_days,
             })
 
+        biz_map = {b.id: b for b in qs}
+
+        rewards_list = []
+        for r in Reward.objects.filter(active=True, business_id__in=list(biz_map.keys())).order_by('-created_at'):
+            b = biz_map[r.business_id]
+            m = member_map.get(r.business_id)
+            redemptions_count = RewardRedemption.objects.filter(reward=r).count()
+            remaining_quota = max(0, r.redemption_limit - redemptions_count) if r.redemption_limit is not None else None
+            quota_available = (r.redemption_limit is None or redemptions_count < r.redemption_limit)
+            points_req = r.points_required or 0
+            points_eligible = (m.points_balance >= points_req) if m else False
+            segment_eligible = (r.audience_segment == segment(b, customer)) if (customer and m) else False
+            eligible = bool(m and segment_eligible and points_eligible and quota_available)
+            condition = f"Requiere {points_req} puntos acumulados (no se descuentan)" if points_req > 0 else "Disponible para miembros"
+            rewards_list.append({
+                'id': str(r.id),
+                'business_id': str(r.business_id),
+                'business_name': b.name,
+                'business_slug': b.slug,
+                'name': r.name,
+                'type': r.type,
+                'description': r.description or '',
+                'points_required': points_req,
+                'redemption_limit': r.redemption_limit,
+                'remaining_quota': remaining_quota,
+                'active': r.active,
+                'eligible': eligible,
+                'condition': condition,
+                'created_at': r.created_at.isoformat() if r.created_at else None,
+            })
+
+        campaigns_list = []
+        for c in Campaign.objects.filter(active=True, status__in=['active', 'scheduled'], business_id__in=list(biz_map.keys())).order_by('-created_at'):
+            b = biz_map[c.business_id]
+            m = member_map.get(c.business_id)
+            redemptions_count = CampaignRedemption.objects.filter(campaign=c).count()
+            remaining_quota = max(0, c.redemption_limit - redemptions_count) if c.redemption_limit is not None else None
+            quota_available = (c.redemption_limit is None or redemptions_count < c.redemption_limit)
+            already_redeemed = CampaignRedemption.objects.filter(campaign=c, customer=customer).exists() if customer else False
+            time_eligible = (c.status in {'active', 'scheduled'} and (c.starts_at is None or c.starts_at <= now) and (c.ends_at is None or c.ends_at > now))
+            segment_eligible = (c.audience_segment == segment(b, customer)) if (customer and m) else False
+            eligible = bool(m and segment_eligible and time_eligible and quota_available and not already_redeemed)
+            condition = f"{c.discount_percent}% de descuento" if c.discount_percent else (f"+{c.reward_points} puntos" if c.reward_points else "Promoción especial")
+            campaigns_list.append({
+                'id': str(c.id),
+                'business_id': str(c.business_id),
+                'business_name': b.name,
+                'business_slug': b.slug,
+                'name': c.name,
+                'type': c.type,
+                'description': c.description or '',
+                'discount_percent': c.discount_percent,
+                'reward_points': c.reward_points,
+                'redemption_limit': c.redemption_limit,
+                'remaining_quota': remaining_quota,
+                'already_redeemed': already_redeemed,
+                'starts_at': c.starts_at.isoformat() if c.starts_at else None,
+                'ends_at': c.ends_at.isoformat() if c.ends_at else None,
+                'active': c.active,
+                'eligible': eligible,
+                'condition': condition,
+                'created_at': c.created_at.isoformat() if c.created_at else None,
+            })
+
+        phase_v1 = (
+            request.query_params.get('phase') == 'v1'
+            or request.query_params.get('v1') == 'true'
+            or request.headers.get('X-LoyLoop-Phase') == 'v1'
+        )
+        missions_list = []
+        if phase_v1:
+            for ms in Mission.objects.filter(active=True, business_id__in=list(biz_map.keys())).order_by('-created_at'):
+                b = biz_map[ms.business_id]
+                m = member_map.get(ms.business_id)
+                time_eligible = (ms.starts_at is None or ms.starts_at <= now) and (ms.ends_at is None or ms.ends_at > now)
+                segment_eligible = (ms.audience_segment == segment(b, customer)) if (customer and m) else False
+                eligible = bool(m and segment_eligible and time_eligible)
+                condition = f"Meta: {ms.goal} {'compras registradas' if ms.category=='frequency' else 'acciones'} (+{ms.reward_points} pts)"
+                missions_list.append({
+                    'id': str(ms.id),
+                    'business_id': str(ms.business_id),
+                    'business_name': b.name,
+                    'business_slug': b.slug,
+                    'name': ms.name,
+                    'category': ms.category,
+                    'description': ms.description or '',
+                    'goal': ms.goal,
+                    'reward_points': ms.reward_points,
+                    'starts_at': ms.starts_at.isoformat() if ms.starts_at else None,
+                    'ends_at': ms.ends_at.isoformat() if ms.ends_at else None,
+                    'active': ms.active,
+                    'eligible': eligible,
+                    'condition': condition,
+                    'created_at': ms.created_at.isoformat() if ms.created_at else None,
+                })
+
         return Response({
             'catalog': catalog_data,
             'pagination': {
@@ -264,6 +360,7 @@ class DiscoveryView(APIView):
                 customer=customer,
                 event_type__in=['purchase', 'stamp', 'reward_redeem', 'mission_progress', 'minipay_payment']
             ).order_by('-created_at').values('business_id', 'event_type', 'points_delta', 'metadata', 'created_at')[:50]) if customer else [],
-            'rewards': list(Reward.objects.filter(active=True).values('business_id', 'name', 'created_at')),
-            'campaigns': list(Campaign.objects.filter(active=True, status='active').values('business_id', 'name', 'starts_at', 'ends_at', 'created_at'))
+            'rewards': rewards_list,
+            'campaigns': campaigns_list,
+            'missions': missions_list,
         })

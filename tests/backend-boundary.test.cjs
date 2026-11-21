@@ -296,6 +296,44 @@ test('commerce profile distinguishes member and non-member, hides missions in MV
   assert.equal(memberProfile.missions.length, 1);
 });
 
+test('benefits catalog filters Todos, Recompensas, Promociones without duplicates and enables Misiones only in V1', async () => {
+  const {state, load} = fixture();
+  state.token = 'customer-session';
+  const customerApi = load('lib/data/customer.ts');
+
+  state.result = {
+    rewards: [
+      { id: 'rew-10', business_id: 'biz-1', business_name: 'Cafe Central', business_slug: 'cafe-central', name: 'Postre gratis', type: 'product', points_required: 150, eligible: true, condition: 'Requiere 150 pts acumulados (no se descuentan)' }
+    ],
+    campaigns: [
+      { id: 'camp-10', business_id: 'biz-1', business_name: 'Cafe Central', business_slug: 'cafe-central', name: '30% descuento', type: 'discount_redeem', discount_percent: 30, eligible: false, condition: '30% de descuento', ends_at: '2026-12-31T23:59:59Z' }
+    ],
+    missions: [
+      { id: 'mis-10', business_id: 'biz-1', business_name: 'Cafe Central', business_slug: 'cafe-central', name: 'Visita 3 veces', goal: 3, reward_points: 50, eligible: true }
+    ],
+    memberships: [
+      { business_id: 'biz-1', points_balance: 180, tier: 'Frecuente' }
+    ]
+  };
+
+  // 1. MVP: Misiones excluded from tabs and items
+  const mvpBenefits = await customerApi.getCustomerBenefits();
+  assert.equal(mvpBenefits.availableTabs.join(','), 'Todos,Recompensas,Promociones');
+  assert.equal(mvpBenefits.items.length, 2);
+  assert.equal(mvpBenefits.items[0].kind, 'reward');
+  assert.equal(mvpBenefits.items[0].eligible, true);
+  assert.equal(mvpBenefits.items[1].kind, 'promotion');
+  assert.equal(mvpBenefits.items[1].eligible, false);
+
+  // 2. V1: Misiones included in tabs and items
+  const v1Benefits = await customerApi.getCustomerBenefits('v1');
+  assert.equal(v1Benefits.availableTabs.join(','), 'Todos,Recompensas,Promociones,Misiones');
+  assert.equal(v1Benefits.items.length, 3);
+  assert.equal(v1Benefits.items[2].kind, 'mission');
+  assert.equal(v1Benefits.items[2].title, 'Visita 3 veces');
+});
+
+
 
 
 

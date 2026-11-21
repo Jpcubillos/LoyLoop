@@ -699,3 +699,165 @@ export async function getCommerceProfile(slug: string, phase?: string): Promise<
     ]
   };
 }
+
+export type CustomerBenefitItem = {
+  id: string;
+  kind: "reward" | "promotion" | "mission";
+  title: string;
+  description: string;
+  businessId: string;
+  businessName: string;
+  businessSlug: string;
+  condition: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  remainingQuota?: number | null;
+  eligible: boolean;
+  actionType: "stamp_add" | "stamp_redeem" | "discount_redeem" | "points_boost";
+  payload: Record<string, unknown>;
+};
+
+export type CustomerBenefitsResult = {
+  items: CustomerBenefitItem[];
+  availableTabs: Array<"Todos" | "Recompensas" | "Promociones" | "Misiones">;
+  stats: {
+    totalPoints: number;
+    totalStamps: number;
+    availableCount: number;
+  };
+};
+
+export async function getCustomerBenefits(phase?: string): Promise<CustomerBenefitsResult> {
+  const isV1 = phase === "v1" || process.env.NEXT_PUBLIC_LOYLOOP_PHASE === "v1";
+  const availableTabs: Array<"Todos" | "Recompensas" | "Promociones" | "Misiones"> = isV1
+    ? ["Todos", "Recompensas", "Promociones", "Misiones"]
+    : ["Todos", "Recompensas", "Promociones"];
+
+  if (usesDjango) {
+    try {
+      const qs = phase ? `?phase=${encodeURIComponent(phase)}` : "";
+      const data = await backendRequest<any>(`/discovery/${qs}`);
+      const rewards = data.rewards || [];
+      const campaigns = data.campaigns || [];
+      const missions = isV1 ? (data.missions || []) : [];
+      const memberships = data.memberships || [];
+
+      const totalPoints = memberships.reduce((acc: number, m: any) => acc + (m.points_balance || 0), 0);
+
+      const items: CustomerBenefitItem[] = [];
+
+      // 1. Recompensas
+      for (const r of rewards) {
+        items.push({
+          id: r.id,
+          kind: "reward",
+          title: r.name,
+          description: r.description || "Recompensa del comercio",
+          businessId: r.business_id,
+          businessName: r.business_name || "Comercio",
+          businessSlug: r.business_slug || "cafe-central",
+          condition: r.condition || (r.points_required ? `${r.points_required} pts requeridos` : "Para miembros"),
+          remainingQuota: r.remaining_quota,
+          eligible: Boolean(r.eligible),
+          actionType: r.type === "discount" ? "discount_redeem" : "stamp_redeem",
+          payload: { rewardId: r.id, name: r.name },
+        });
+      }
+
+      // 2. Promociones
+      for (const c of campaigns) {
+        items.push({
+          id: c.id,
+          kind: "promotion",
+          title: c.name,
+          description: c.description || "Promoción especial",
+          businessId: c.business_id,
+          businessName: c.business_name || "Comercio",
+          businessSlug: c.business_slug || "cafe-central",
+          condition: c.condition || `${c.discount_percent || 0}% de descuento`,
+          startsAt: c.starts_at,
+          endsAt: c.ends_at,
+          remainingQuota: c.remaining_quota,
+          eligible: Boolean(c.eligible),
+          actionType: c.type === "points_boost" ? "points_boost" : "discount_redeem",
+          payload: { campaignId: c.id, name: c.name },
+        });
+      }
+
+      // 3. Misiones (solo si isV1)
+      if (isV1) {
+        for (const m of missions) {
+          items.push({
+            id: m.id,
+            kind: "mission",
+            title: m.name,
+            description: m.description || "",
+            businessId: m.business_id,
+            businessName: m.business_name || "Comercio",
+            businessSlug: m.business_slug || "cafe-central",
+            condition: m.condition || `Meta: ${m.goal}`,
+            startsAt: m.starts_at,
+            endsAt: m.ends_at,
+            eligible: Boolean(m.eligible),
+            actionType: "stamp_add",
+            payload: { missionId: m.id },
+          });
+        }
+      }
+
+      const availableCount = items.filter((item) => item.eligible).length;
+
+      return {
+        items,
+        availableTabs,
+        stats: {
+          totalPoints,
+          totalStamps: 6,
+          availableCount,
+        },
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback demo data
+  return {
+    items: [
+      {
+        id: "demo-reward-1",
+        kind: "reward",
+        title: "Capuchino de la casa",
+        description: "Bebida caliente de especialidad",
+        businessId: "demo-cafe",
+        businessName: "Cafe Central",
+        businessSlug: "cafe-central",
+        condition: "Requiere 100 puntos acumulados (no se descuentan)",
+        remainingQuota: 10,
+        eligible: true,
+        actionType: "stamp_redeem",
+        payload: { rewardId: "demo-reward-1" },
+      },
+      {
+        id: "demo-campaign-1",
+        kind: "promotion",
+        title: "15% de descuento",
+        description: "En pastelería y repostería",
+        businessId: "demo-cafe",
+        businessName: "Cafe Central",
+        businessSlug: "cafe-central",
+        condition: "15% de descuento",
+        remainingQuota: 20,
+        eligible: true,
+        actionType: "discount_redeem",
+        payload: { campaignId: "demo-campaign-1" },
+      },
+    ],
+    availableTabs,
+    stats: {
+      totalPoints: 120,
+      totalStamps: 6,
+      availableCount: 2,
+    },
+  };
+}
