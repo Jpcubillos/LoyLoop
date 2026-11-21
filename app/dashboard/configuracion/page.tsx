@@ -1,7 +1,7 @@
 import { CreditCard, Save, ShieldCheck, Store, Wallet } from "lucide-react";
-import { createBusinessUser, updateAppUserRole, updateBusinessSegmentationRules } from "@/lib/actions/app-users";
+import { createBusinessUser, updateAppUserRole, updateBusinessSegmentationRules, updateBusinessProfile } from "@/lib/actions/app-users";
 import { getAppUsers } from "@/lib/data/app-users";
-import { getBusinessSettings } from "@/lib/data/dashboard";
+import { getBusinessSettings, getCafeCentral } from "@/lib/data/dashboard";
 
 const businessRoles = [
   { value: "owner", label: "Dueño" },
@@ -12,38 +12,80 @@ const businessRoles = [
 export default async function ConfiguracionPage() {
   const users = await getAppUsers();
   const businessSettings = await getBusinessSettings();
+  const business = await getCafeCentral();
 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black">Configuracion</h1>
-          <p className="mt-1 text-muted">Informacion del comercio, usuarios, roles y pagos</p>
+          <p className="mt-1 text-muted">Informacion del comercio, usuarios, roles y segmentacion</p>
         </div>
-        <button className="btn-primary"><Save className="h-4 w-4" /> Guardar cambios</button>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_390px]">
         <div className="grid gap-6">
-          <div className="rounded-lg border border-line bg-white p-5">
-            <div className="mb-5 flex items-center gap-3">
-              <Store className="h-5 w-5 text-brand-500" />
-              <h2 className="font-black">Datos del comercio</h2>
+          <form action={updateBusinessProfile} className="rounded-lg border border-line bg-white p-5">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Store className="h-5 w-5 text-brand-500" />
+                <h2 className="font-black">Datos del comercio</h2>
+              </div>
+              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                Estado: Activo
+              </span>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              {[
-                ["Nombre", "Cafe Central"],
-                ["Categoria", "Cafeteria"],
-                ["Direccion", "Cra. 7 #45-12, Bogota"],
-                ["Telefono", "+57 300 123 4567"]
-              ].map(([label, value]) => (
-                <label key={label} className="grid gap-1 text-sm font-bold">
-                  {label}
-                  <input className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal" defaultValue={value} />
-                </label>
-              ))}
+              <label className="grid gap-1 text-sm font-bold">
+                Nombre del comercio
+                <input
+                  name="name"
+                  className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal"
+                  defaultValue={business?.name ?? "Café Central"}
+                  required
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-bold">
+                Categoría
+                <input
+                  name="category"
+                  className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal"
+                  defaultValue={business?.category ?? "Cafetería"}
+                  required
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-bold">
+                Dirección / Sede principal
+                <input
+                  name="address"
+                  className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal"
+                  defaultValue={business?.address ?? "Cra. 7 #45-12"}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-bold">
+                Ciudad
+                <input
+                  name="city"
+                  className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal"
+                  defaultValue={business?.city ?? "Bogotá"}
+                />
+              </label>
             </div>
-          </div>
+            <label className="mt-4 grid gap-1 text-sm font-bold">
+              Descripción del programa de fidelización
+              <textarea
+                name="description"
+                rows={3}
+                className="rounded-lg border border-line bg-slate-50 px-3 py-2 font-normal text-sm"
+                defaultValue={business?.description ?? "Café de especialidad, postres y recompensas para clientes frecuentes."}
+              />
+            </label>
+            <div className="mt-4 flex justify-end">
+              <button type="submit" className="btn-primary">
+                <Save className="h-4 w-4" /> Guardar datos del comercio
+              </button>
+            </div>
+          </form>
 
           <div className="rounded-lg border border-line bg-white p-5">
             <div className="mb-5 flex items-center gap-3">

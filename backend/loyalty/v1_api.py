@@ -69,10 +69,54 @@ class BusinessCatalogView(DomainView):
         fields = ('id','slug','name','category','description','address','city','logo_url')
         if business_id:
             business = get_object_or_404(Business, pk=business_id)
-            return Response({field: str(getattr(business,field)) if field=='id'
-                             else getattr(business,field) for field in fields})
+            plan = BusinessPlanAssignment.objects.filter(business_id=business.id).first()
+            data = {field: str(getattr(business,field)) if field=='id'
+                    else getattr(business,field) for field in fields}
+            data['status'] = plan.status if plan else ('active' if business.owner_user_id else 'trial')
+            return Response(data)
         return Response([{'id':str(item['id']),**{k:v for k,v in item.items() if k!='id'}}
                          for item in Business.objects.order_by('name','id').values(*fields)[:100]])
+
+    def patch(self, request, business_id):
+        business = business_for(request.user, business_id, {'owner'})
+        allowed = {'name', 'category', 'description', 'address', 'city', 'logo_url'}
+        strict(request.data, allowed)
+
+        class BusinessUpdateSerializer(serializers.Serializer):
+            name = serializers.CharField(max_length=160, required=False)
+            category = serializers.CharField(max_length=120, required=False)
+            description = serializers.CharField(max_length=3000, required=False, allow_blank=True, allow_null=True)
+            address = serializers.CharField(max_length=300, required=False, allow_blank=True, allow_null=True)
+            city = serializers.CharField(max_length=120, required=False, allow_blank=True, allow_null=True)
+            logo_url = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True)
+
+            def validate_name(self, value):
+                if value is not None and not value.strip():
+                    invalid('El nombre del comercio no puede estar vacio.')
+                return value.strip() if value else value
+
+            def validate_category(self, value):
+                if value is not None and not value.strip():
+                    invalid('La categoria no puede estar vacia.')
+                return value.strip() if value else value
+
+        serializer = BusinessUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data:
+            invalid('No se enviaron datos para actualizar.')
+
+        with transaction.atomic():
+            b = Business.objects.select_for_update().get(pk=business.pk)
+            for k, v in serializer.validated_data.items():
+                setattr(b, k, v)
+            b.save(update_fields=list(serializer.validated_data.keys()))
+            audited(request.user, b)
+
+        fields = ('id','slug','name','category','description','address','city','logo_url')
+        plan = BusinessPlanAssignment.objects.filter(business_id=business.id).first()
+        data = {field: str(getattr(b, field)) if field == 'id' else getattr(b, field) for field in fields}
+        data['status'] = plan.status if plan else ('active' if b.owner_user_id else 'trial')
+        return Response(data)
 
 
 class MyMembershipsView(DomainView):

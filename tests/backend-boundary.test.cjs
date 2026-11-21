@@ -28,6 +28,7 @@ function fixture(){
       fetch:async(url,options)=>{state.calls.push({url,options});return new Response(JSON.stringify(state.result??{ok:true}),{status:state.status??200});},
       require:name=>{
         if(name==='server-only')return {};
+        if(name==='next/cache')return {revalidatePath:()=>{},revalidateTag:()=>{}};
         if(name==='next/headers')return {cookies:async()=>({get:()=>state.token?{value:state.token}:undefined})};
         if(name==='next/server')return {NextResponse};
         if(name==='@/lib/supabase/client')return {supabase:{auth:{getUser:async()=>{state.providerCalls++;return {data:{user:{email_confirmed_at:state.confirmed?'confirmed':null,is_anonymous:false}},error:null};}}}};
@@ -112,4 +113,25 @@ test('claim preview and validation use the server-authorized tenant and reject c
     method:'POST',headers:{Origin:'https://malicious.example'},body:JSON.stringify({code:'CLAIM-123'})
   });
   assert.equal((await previewRoute.POST(crossOrigin)).status,403);
+});
+
+test('business profile update uses the server-authorized tenant and requires valid fields',async()=>{
+  const {state,load}=fixture();state.token='private-session';
+  const id='30000000-0000-0000-0000-000000000003';
+  state.result={business_id:id,active:true,businesses:[{id,slug:'my-cafe',name:'My Cafe',role:'owner'}]};
+  const appUsers=load('lib/actions/app-users.ts');
+  const formData=new Map([
+    ['name','Nuevo Nombre'],['category','Cafeteria'],['address','Cra 7 #45-12'],['city','Bogota'],['description','Desc']
+  ]);
+  const fakeFormData={get:(k)=>formData.get(k)};
+  await appUsers.updateBusinessProfile(fakeFormData);
+  const patchCall=state.calls.find(c=>c.url===`https://backend.example/api/businesses/${id}/`&&c.options.method==='PATCH');
+  assert.ok(patchCall);
+  const body=JSON.parse(patchCall.options.body);
+  assert.equal(body.name,'Nuevo Nombre');
+  assert.equal(body.category,'Cafeteria');
+  assert.equal(body.address,'Cra 7 #45-12');
+
+  const emptyFormData={get:(k)=>k==='name'?'':formData.get(k)};
+  await assert.rejects(appUsers.updateBusinessProfile(emptyFormData),/El nombre del comercio es obligatorio/);
 });

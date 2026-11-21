@@ -31,3 +31,25 @@ export async function updateBusinessSegmentationRules(formData:FormData) {
   await backendRequest(`/businesses/${business.id}/segmentation/`,'PATCH',values);
   revalidatePath('/dashboard/configuracion');
 }
+
+export async function updateBusinessProfile(formData:FormData) {
+  const business=await backendBusiness();
+  const name=String(formData.get('name')??'').trim();
+  const category=String(formData.get('category')??'').trim();
+  const address=String(formData.get('address')??'').trim();
+  const city=String(formData.get('city')??'').trim();
+  const description=String(formData.get('description')??'').trim();
+
+  if(!name) throw new Error('El nombre del comercio es obligatorio.');
+  if(!category) throw new Error('La categoria es obligatoria.');
+
+  await backendRequest(`/businesses/${business.id}/`,'PATCH',{
+    name,
+    category,
+    address:address||null,
+    city:city||null,
+    description:description||null,
+  });
+  revalidatePath('/dashboard/configuracion');
+  revalidatePath('/dashboard');
+}

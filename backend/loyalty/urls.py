@@ -1,3 +1,4 @@
+from .v1_api import BusinessCatalogView
 from .discovery_api import DiscoveryView
 from django.urls import path
 from .api import SessionView, CustomerIdentityView, OffersView
@@ -17,6 +18,7 @@ urlpatterns = [
     path("business-leads/",PublicLeadView.as_view()),
     path("platform/business-leads/",LeadsView.as_view()),
     path("platform/business-leads/<uuid:lead_id>/approve/",LeadsView.as_view()),
+    path("businesses/<uuid:business_id>/",BusinessCatalogView.as_view()),
     path("businesses/<uuid:business_id>/segmentation/",SegmentationView.as_view()),
     path("businesses/<uuid:business_id>/staff/",StaffView.as_view()),
     path("businesses/<uuid:business_id>/staff/<uuid:item_id>/",StaffView.as_view()),

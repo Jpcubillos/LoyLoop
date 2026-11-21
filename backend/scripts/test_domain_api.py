@@ -91,6 +91,28 @@ def main():
     assert client.post(f'/api/v1/businesses/{business.id}/identify/',{},format='json').status_code == 403
     assert client.post(f'/api/v1/businesses/{business.id}/validate-claim/',{},format='json').status_code == 403
 
+    biz_url = f'/api/v1/businesses/{business.id}/'
+    assert client.get(biz_url).status_code == 200
+    assert client.get(biz_url).data['name'] == business.name
+    assert client.patch(biz_url, {'name': 'Hacked'}, format='json').status_code == 403
+    client.force_authenticate(actors['cashier'])
+    assert client.patch(biz_url, {'name': 'Hacked'}, format='json').status_code == 403
+    client.force_authenticate(actors['owner'])
+    patch_res = client.patch(biz_url, {
+        'name': 'Updated Business Name',
+        'category': 'Restaurante',
+        'address': 'Calle 100 #15-20, Bogota',
+        'city': 'Bogota',
+        'description': 'Programa oficial de fidelizacion'
+    }, format='json')
+    assert patch_res.status_code == 200, patch_res.data
+    assert patch_res.data['name'] == 'Updated Business Name'
+    assert patch_res.data['address'] == 'Calle 100 #15-20, Bogota'
+    business.refresh_from_db()
+    assert business.name == 'Updated Business Name'
+    assert business.address == 'Calle 100 #15-20, Bogota'
+    assert client.patch(biz_url, {'name': '   '}, format='json').status_code == 400
+
     activity_url=f'/api/v1/businesses/{business.id}/activities/'
     data={'membershipId':str(membership.id),'pointsAwarded':7,'stampsAdded':1,
           'stampCardId':str(card.id),'reason':'Confirmed POS purchase'}
