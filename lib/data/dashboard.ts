@@ -1,4 +1,4 @@
-import { usesDjango, dashboardBusiness as backendBusiness } from "@/lib/backend/server";
+import { usesDjango, dashboardBusiness as backendBusiness, backendRequest } from "@/lib/backend/server";
 import { supabase } from "@/lib/supabase/client";
 import {
   campaigns as fallbackCampaigns,
@@ -68,6 +68,15 @@ export type BusinessSettings = {
   inactiveDays: number;
 };
 
+export type BusinessAwardRuleSettings = {
+  pointsPerPurchase: number;
+  stampsPerPurchase: number;
+  stampsEnabled: boolean;
+  minPurchaseCents: number;
+  version: number;
+  effectiveFrom?: string;
+};
+
 export async function getCafeCentral() {
   const selected = usesDjango ? await backendBusiness() : null;
   const { data, error } = await db
@@ -89,6 +98,30 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     atRiskDays: business?.at_risk_days ?? 90,
     inactiveDays: business?.inactive_days ?? 180
   };
+}
+
+export async function getBusinessAwardRules(): Promise<BusinessAwardRuleSettings> {
+  const selected = usesDjango ? await backendBusiness().catch(() => null) : null;
+  if (!selected) {
+    return {
+      pointsPerPurchase: 10,
+      stampsPerPurchase: 1,
+      stampsEnabled: true,
+      minPurchaseCents: 0,
+      version: 1,
+    };
+  }
+  try {
+    return await backendRequest<BusinessAwardRuleSettings>(`/businesses/${selected.id}/award-rules/`, "GET");
+  } catch {
+    return {
+      pointsPerPurchase: 10,
+      stampsPerPurchase: 1,
+      stampsEnabled: true,
+      minPurchaseCents: 0,
+      version: 1,
+    };
+  }
 }
 
 function getFallbackCampaigns(): DashboardCampaign[] {

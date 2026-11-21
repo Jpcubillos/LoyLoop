@@ -12,7 +12,9 @@ async function proxy(request:Request,context:{params:Promise<{path:string[]}>}) 
       if (text.length>32768) return NextResponse.json({ok:false},{status:413});
       body=text ? JSON.parse(text) : undefined;
     }
-    const result=await backendRequest('/'+path.join('/')+'/',request.method,body);
+    const url=new URL(request.url);
+    const search=url.search;
+    const result=await backendRequest('/'+path.join('/')+'/'+search,request.method,body);
     return result===undefined ? new NextResponse(null,{status:204}) : NextResponse.json(result,{headers:{'Cache-Control':'no-store'}});
   } catch(error) {
     return NextResponse.json({ok:false,message:'No pudimos completar la accion.'},{status:error instanceof BackendError ? error.status : 400});

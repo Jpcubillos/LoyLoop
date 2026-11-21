@@ -31,3 +31,60 @@ export async function updateBusinessSegmentationRules(formData:FormData) {
   await backendRequest(`/businesses/${business.id}/segmentation/`,'PATCH',values);
   revalidatePath('/dashboard/configuracion');
 }
+
+export async function updateBusinessProfile(formData:FormData) {
+  const business=await backendBusiness();
+  const name=String(formData.get('name')??'').trim();
+  const category=String(formData.get('category')??'').trim();
+  const address=String(formData.get('address')??'').trim();
+  const city=String(formData.get('city')??'').trim();
+  const description=String(formData.get('description')??'').trim();
+
+  if(!name) throw new Error('El nombre del comercio es obligatorio.');
+  if(!category) throw new Error('La categoria es obligatoria.');
+
+  await backendRequest(`/businesses/${business.id}/`,'PATCH',{
+    name,
+    category,
+    address:address||null,
+    city:city||null,
+    description:description||null,
+  });
+  revalidatePath('/dashboard/configuracion');
+  revalidatePath('/dashboard');
+}
+
+export async function updateBusinessAwardRules(formData: FormData) {
+  const business = await backendBusiness();
+  const pointsPerPurchase = Number(formData.get("points_per_purchase") ?? 10);
+  const stampsPerPurchase = Number(formData.get("stamps_per_purchase") ?? 1);
+  const stampsEnabled = formData.get("stamps_enabled") === "on" || formData.get("stamps_enabled") === "true";
+  const minPurchaseCents = Number(formData.get("min_purchase_cents") ?? 0);
+
+  if (!Number.isInteger(pointsPerPurchase) || pointsPerPurchase < 0) {
+    throw new Error("Los puntos por compra deben ser un número entero mayor o igual a 0.");
+  }
+  if (!Number.isInteger(stampsPerPurchase) || stampsPerPurchase < 0) {
+    throw new Error("Los sellos por compra deben ser un número entero mayor o igual a 0.");
+  }
+
+  await backendRequest(`/businesses/${business.id}/award-rules/`, "PUT", {
+    pointsPerPurchase,
+    stampsPerPurchase,
+    stampsEnabled,
+    minPurchaseCents,
+  });
+  revalidatePath("/dashboard/configuracion");
+}
+
+export async function joinBusinessAction(businessId: string) {
+  if (!businessId || !/^[0-9a-fA-F-]{36}$/.test(businessId)) {
+    throw new Error("Identificador de comercio no válido.");
+  }
+  const result = await backendRequest<{ id: string }>(`/memberships/${businessId}/`, "POST", {});
+  revalidatePath("/c");
+  revalidatePath("/c/comercios");
+  return { ok: true, membershipId: result.id };
+}
+
+

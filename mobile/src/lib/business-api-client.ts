@@ -5,22 +5,22 @@ export function createBusinessApi(
   transport: typeof fetch = fetch,
   publicDiscovery = false,
 ) {
-  return async function request<T>(path: string, method = "GET", body?: unknown): Promise<T> {
+  return async function request<T>(path: string, method = "GET", body?: unknown, customHeaders?: Record<string, string>): Promise<T> {
     let base: URL;
     try { base = new URL(baseUrl); } catch { throw new Error("El servicio de LoyLoop no esta configurado."); }
     if (base.username || base.password || base.search || base.hash || base.pathname !== "/" ||
       (base.protocol !== "https:" && !(base.protocol === "http:" && ["localhost", "127.0.0.1"].includes(base.hostname))) ||
-      !/^\/[a-zA-Z0-9_/-]+\/$/.test(path)) {
+      !/^\/[a-zA-Z0-9_/-]+\/(?:\?[a-zA-Z0-9_=&%-]*)?$/.test(path)) {
       throw new Error("La direccion del servicio de LoyLoop no es valida.");
     }
     const accessToken = await token();
-    if (!accessToken && !(publicDiscovery && method === "GET" && /^\/discovery\/(?:[a-zA-Z0-9_-]+\/)?$/.test(path))) throw new Error("Inicia sesion para continuar.");
+    if (!accessToken && !(publicDiscovery && method === "GET" && /^\/discovery\/(?:[a-zA-Z0-9_-]+\/)?(?:\?[a-zA-Z0-9_=&%-]*)?$/.test(path))) throw new Error("Inicia sesion para continuar.");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await transport(`${base.origin}/api${path}`, {
         method, signal: controller.signal,
-        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json" },
+        headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}), "Content-Type": "application/json", ...(customHeaders ?? {}) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       if (!response.ok) {

@@ -111,13 +111,14 @@ export function QRClaimCard({
   onClose: () => void;
   onApproved?: () => void;
 }) {
-  const [request, setRequest] = useState<{ code: string; expiresAt: string }>();
+  const [request, setRequest] = useState<{ code: string; manualCode?: string; expiresAt: string }>();
   const [status, setStatus] = useState("pending");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [attempt, setAttempt] = useState(0);
   const notified = useRef(false);
+  const idempotencyKey = useRef<string>("");
   useEffect(() => {
     let active = true;
     setRequest(undefined);
@@ -125,16 +126,21 @@ export function QRClaimCard({
     setStatus("pending");
     notified.current = false;
     if (!input) return;
+    if (!idempotencyKey.current || attempt > 0) {
+      idempotencyKey.current = `claim-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
+    }
     setLoading(true);
     const operation = isDemo
       ? Promise.resolve({
           code: `DEMO-${input.businessSlug.toUpperCase()}-${Date.now().toString(36).toUpperCase()}`,
+          manualCode: "1234567890123456",
           expiresAt: new Date(Date.now() + 300000).toISOString(),
         })
       : createClaimRequest({
           actionType: input.action,
           businessSlug: input.businessSlug,
           payload: input.payload,
+          idempotencyKey: idempotencyKey.current,
         });
     operation
       .then((value) => {
@@ -262,6 +268,9 @@ export function QRClaimCard({
                 Código para ingresar manualmente
               </Txt>
               <View
+                accessible={true}
+                accessibilityRole="text"
+                accessibilityLabel={`Código para ingresar manualmente: ${(request.manualCode || request.code).split("").join(" ")}`}
                 style={{
                   backgroundColor: "#F6F7FB",
                   padding: 18,
@@ -274,7 +283,9 @@ export function QRClaimCard({
                   size={16}
                   style={{ letterSpacing: 2, textAlign: "center" }}
                 >
-                  {request.code}
+                  {request.manualCode
+                    ? request.manualCode.match(/.{1,4}/g)?.join(" ")
+                    : request.code}
                 </Txt>
               </View>
               <View style={{ alignItems: "center", gap: 3 }}>

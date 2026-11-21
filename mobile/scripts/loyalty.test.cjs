@@ -79,3 +79,27 @@ test("claim success requires merchant approval even after local expiration", () 
   assert.equal(rules.getClaimState("pending", "2099-01-01"), "pending");
   assert.equal(rules.getClaimState("unknown", "2099-01-01"), "pending");
 });
+
+test("quota exhaustion and independent stamps are strictly enforced without altering points", () => {
+  const member = { isMember: true, points: 300, stamps: 5 };
+  const offerWithCapacity = {
+    kind: "reward",
+    requiredPoints: 200,
+    remainingCapacity: 3,
+  };
+  assert.equal(rules.canClaimOffer(offerWithCapacity, member), true);
+
+  const offerExhausted = {
+    kind: "reward",
+    requiredPoints: 200,
+    remainingCapacity: 0,
+  };
+  assert.equal(rules.canClaimOffer(offerExhausted, member), false);
+
+  // Independent stamps: points do not fulfill stamps and stamps do not fulfill points
+  const stampOffer = { kind: "reward", requiredStamps: 10, remainingCapacity: 1 };
+  assert.equal(rules.canClaimOffer(stampOffer, member), false);
+  assert.equal(rules.canClaimOffer(stampOffer, { ...member, stamps: 10 }), true);
+  // Points remain untouched
+  assert.equal(member.points, 300);
+});

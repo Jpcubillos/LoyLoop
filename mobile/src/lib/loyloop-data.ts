@@ -19,6 +19,7 @@ export type BusinessSummary = {
   tier: string;
   pointsToVip: number | null;
   isMember: boolean;
+  isAvailable?: boolean;
   rating?: number;
   distance?: number;
   sponsored?: boolean;
@@ -45,6 +46,9 @@ export type Offer = {
   action?: ClaimAction;
   payload?: Record<string, unknown>;
   eligibleForAudience?: boolean;
+  redemptionLimit?: number | null;
+  remainingCapacity?: number | null;
+  condition?: string;
 };
 export type RewardSummary = Offer;
 export type BusinessDetail = BusinessSummary & {
@@ -177,7 +181,13 @@ export function nextCommerceTier(points: number) {
 async function customerId() {
   return currentCustomerId();
 }
-export async function getBusinesses(): Promise<BusinessSummary[]> {
+export async function getBusinesses(params?: {
+  query?: string;
+  category?: string;
+  membership?: "all" | "member";
+  page?: number;
+  pageSize?: number;
+}): Promise<BusinessSummary[]> {
   if (isDemo) {
     const joined: string[] = JSON.parse(
       (await AsyncStorage.getItem("loyloop.demo.memberships")) || "[]",
@@ -185,9 +195,18 @@ export async function getBusinesses(): Promise<BusinessSummary[]> {
     return fallbackBusinesses.map((b) => ({
       ...b,
       isMember: b.isMember || joined.includes(b.slug),
+      isAvailable: true,
     }));
   }
-  const result = await discoveryApi<DiscoveryData>("/discovery/");
+  const queryParts: string[] = [];
+  if (params?.query) queryParts.push(`q=${encodeURIComponent(params.query)}`);
+  if (params?.category && params.category !== "Todos") queryParts.push(`category=${encodeURIComponent(params.category)}`);
+  if (params?.membership === "member") queryParts.push("membership=member");
+  if (params?.page) queryParts.push(`page=${params.page}`);
+  if (params?.pageSize) queryParts.push(`page_size=${params.pageSize}`);
+  const qs = queryParts.length ? `?${queryParts.join("&")}` : "";
+
+  const result = await discoveryApi<DiscoveryData>(`/discovery/${qs}`);
   const catalog = { data: result.catalog };
   const memberships = { data: result.memberships };
   const activity = { data: result.activity };
@@ -231,6 +250,7 @@ export async function getBusinesses(): Promise<BusinessSummary[]> {
       tier: membership?.tier || "Miembro",
       pointsToVip: null,
       isMember: !!membership,
+      isAvailable: (b as any).is_available ?? true,
       customerSegment,
     };
   });
@@ -354,10 +374,31 @@ function demoDetail(b: BusinessSummary): BusinessDetail {
   };
 }
 export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
-  const business = (await getBusinesses()).find((b) => b.slug === slug);
-  if (!business) throw new Error("No encontramos este comercio.");
-  if (isDemo) return demoDetail(business);
+  if (isDemo) {
+    const business = (await getBusinesses()).find((b) => b.slug === slug);
+    if (!business) throw new Error("No encontramos este comercio.");
+    return demoDetail(business);
+  }
   const result = await discoveryApi<DiscoveryDetail>(`/discovery/${slug}/`);
+  const bRow = result.business;
+  const business: BusinessSummary | undefined = bRow
+    ? {
+        id: bRow.id,
+        slug: bRow.slug,
+        name: bRow.name,
+        category: bRow.category,
+        description: bRow.description || "",
+        address: bRow.address || "",
+        logoUrl: bRow.logo_url,
+        points: bRow.points_balance ?? result.membership?.points_balance ?? 0,
+        credit: "",
+        tier: bRow.tier ?? result.membership?.tier ?? "Miembro",
+        pointsToVip: null,
+        isMember: Boolean(bRow.is_member ?? result.membership),
+        isAvailable: bRow.is_available ?? true,
+      }
+    : (await getBusinesses()).find((b) => b.slug === slug);
+  if (!business) throw new Error("No encontramos este comercio.");
   const stamps = { data: result.stamps };
   const rewards = { data: result.rewards };
   const campaigns = { data: result.campaigns };
@@ -386,6 +427,10 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
     const requiredStamps = stampReward
       ? (stamps.data?.required_stamps ?? 10)
       : 0;
+    const quotaAvailable =
+      r.remaining_quota === undefined ||
+      r.remaining_quota === null ||
+      r.remaining_quota > 0;
     const candidate = {
       kind:
         r.points_required || stampReward
@@ -393,6 +438,7 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
           : ("benefit" as const),
       requiredPoints: r.points_required ?? 0,
       requiredStamps,
+      remainingCapacity: r.remaining_quota,
     };
     const action: ClaimAction | undefined = stampReward
       ? "stamp_redeem"
@@ -401,7 +447,25 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
         : undefined;
     const audienceEligible = matchesAudience(r.audience_segment);
     const available =
-      business.isMember && audienceEligible && canClaimOffer(candidate, member);
+      business.isMember &&
+      audienceEligible &&
+      quotaAvailable &&
+      canClaimOffer(candidate, member);
+    let meta = "";
+    if (!quotaAvailable) {
+      meta = "Cupo agotado";
+    } else if (requiredStamps) {
+      meta = `${member.stamps} / ${requiredStamps} sellos`;
+    } else if (r.points_required) {
+      meta = `Nivel: ${r.points_required} pts de fidelidad (no se descuentan)`;
+    } else if (audienceEligible) {
+      meta = "Disponible para miembros";
+    } else {
+      meta = `Disponible para clientes ${r.audience_segment === "vip" ? "VIP" : r.audience_segment === "at_risk" ? "en riesgo" : "inactivos"}`;
+    }
+    if (quotaAvailable && r.remaining_quota !== undefined && r.remaining_quota !== null) {
+      meta += ` · Cupo: ${r.remaining_quota}`;
+    }
     return {
       ...base,
       ...candidate,
@@ -410,15 +474,12 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
       description: r.description || "",
       available,
       eligibleForAudience: audienceEligible,
-      meta: requiredStamps
-        ? `${member.stamps} / ${requiredStamps} sellos`
-        : r.points_required
-          ? `Nivel: ${r.points_required} pts de fidelidad`
-          : audienceEligible
-            ? "Disponible para miembros"
-            : `Disponible para clientes ${r.audience_segment === "vip" ? "VIP" : r.audience_segment === "at_risk" ? "en riesgo" : "inactivos"}`,
-      action: business.isMember && audienceEligible ? action : undefined,
+      meta,
+      action: business.isMember && audienceEligible && quotaAvailable ? action : undefined,
       payload: { rewardId: r.id, campaignName: r.name },
+      redemptionLimit: r.redemption_limit,
+      remainingCapacity: r.remaining_quota,
+      condition: r.condition || (r.points_required ? `${r.points_required} pts acumulados requeridos` : undefined),
     };
   });
   return {
@@ -435,34 +496,59 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
       )
       .map((c) => {
         const audienceEligible = matchesAudience(c.audience_segment);
+        const quotaAvailable =
+          c.remaining_quota === undefined ||
+          c.remaining_quota === null ||
+          c.remaining_quota > 0;
         const candidate = {
           kind: "promotion" as const,
           startsAt: c.starts_at || undefined,
           endsAt: c.ends_at || undefined,
+          remainingCapacity: c.remaining_quota,
         };
+        const available =
+          business.isMember &&
+          audienceEligible &&
+          quotaAvailable &&
+          !c.already_redeemed &&
+          canClaimOffer(candidate, member);
+        let meta = "";
+        if (c.already_redeemed) {
+          meta = "Ya canjeado";
+        } else if (!quotaAvailable) {
+          meta = "Cupo agotado";
+        } else if (!audienceEligible) {
+          meta = "Exclusivo para otros clientes";
+        } else if (c.ends_at) {
+          meta = `Hasta ${new Date(c.ends_at).toLocaleDateString("es-CO")}${c.remaining_quota !== undefined && c.remaining_quota !== null ? ` · Cupo: ${c.remaining_quota}` : ""}`;
+        } else {
+          meta = "Consulta vigencia en el comercio";
+        }
         return {
           ...base,
           ...candidate,
           id: c.id,
           title: c.name,
           description: c.description || "",
-          available:
+          available,
+          action:
             business.isMember &&
             audienceEligible &&
-            canClaimOffer(candidate, member),
-          action: business.isMember && audienceEligible ? c.type : undefined,
+            quotaAvailable &&
+            !c.already_redeemed
+              ? c.type
+              : undefined,
           eligibleForAudience: audienceEligible,
-          meta: !audienceEligible
-            ? "Exclusivo para otros clientes"
-            : c.ends_at
-              ? `Hasta ${new Date(c.ends_at).toLocaleDateString("es-CO")}`
-              : "Consulta vigencia en el comercio",
+          meta,
           payload: {
             campaignId: c.id,
             campaignName: c.name,
             discountPercent: c.discount_percent,
             rewardPoints: c.reward_points,
           },
+          redemptionLimit: c.redemption_limit,
+          remainingCapacity: c.remaining_quota,
+          condition: c.condition,
         };
       }),
     missions: (missions.data ?? [])
@@ -477,14 +563,15 @@ export async function getBusinessDetail(slug: string): Promise<BusinessDetail> {
           description: m.description || "",
           meta: !business.isMember
             ? `Únete para participar · +${m.reward_points} pts`
-            : audienceEligible
+            : m.condition || (audienceEligible
               ? `+${m.reward_points} pts de fidelidad`
-              : "Misión para otro segmento de clientes",
+              : "Misión para otro segmento de clientes"),
           available: false,
           eligibleForAudience: audienceEligible,
           points:
             business.isMember && audienceEligible ? m.reward_points : undefined,
           goal: m.goal,
+          condition: m.condition || `Meta: ${m.goal} compras o visitas (+${m.reward_points} pts)`,
           progress:
             business.isMember && audienceEligible
               ? (progress.data?.find((p) => p.mission_id === m.id)?.progress ??

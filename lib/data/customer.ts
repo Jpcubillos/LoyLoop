@@ -142,8 +142,56 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     ]
   };
 
-  if (usesDjango) Object.assign(fallback,{points:0,creditCents:0,tier:"Sin membresia",currentStamps:0,requiredStamps:10,availableCampaigns:[],availableRewards:[],availableMissions:[],history:[]});
-  const identity=usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}) : null;
+  if (usesDjango) {
+    try {
+      const data = await backendRequest<any>("/discovery/cafe-central/", "GET");
+      if (data) {
+        const stamps = data.stamps;
+        const membership = data.membership;
+        return {
+          points: membership?.points_balance ?? 0,
+          creditCents: membership?.credit_balance_cents ?? 0,
+          tier: membership?.tier ?? "Sin membresia",
+          currentStamps: stamps?.current_stamps ?? 0,
+          requiredStamps: stamps?.required_stamps ?? 10,
+          availableCampaigns: (data.campaigns ?? []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            description: c.description ?? "",
+            discountPercent: c.discount_percent,
+            rewardPoints: c.reward_points ?? 0
+          })),
+          availableRewards: (data.rewards ?? []).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            description: r.description ?? "",
+            pointsRequired: r.points_required,
+            creditAmountCents: r.credit_amount_cents
+          })),
+          availableMissions: (data.missions ?? []).map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            category: m.category,
+            description: m.description ?? "",
+            goal: m.goal ?? 1,
+            progress: (data.progress ?? []).find((p: any) => p.mission_id === m.id)?.progress ?? 0,
+            rewardPoints: m.reward_points ?? 0
+          })),
+          history: (data.activity ?? []).map((ev: any) => [
+            "Reciente",
+            ev.metadata?.label ?? ev.event_type,
+            formatEventValue(ev.points_delta ?? 0, ev.credit_delta_cents ?? 0)
+          ])
+        };
+      }
+    } catch {
+      // Fallback if not authenticated or offline
+    }
+  }
+
+  const identity = usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}).catch(() => null) : null;
 
   const { data: business, error: businessError } = await db
     .from("businesses")
@@ -314,5 +362,502 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
           formatEventValue(event.points_delta, event.credit_delta_cents)
         ])
       : fallback.history
+  };
+}
+
+export type ExploreBusiness = {
+  id: string;
+  slug: string;
+  name: string;
+  category: string;
+  description: string;
+  address: string;
+  city?: string;
+  logoUrl?: string;
+  isAvailable: boolean;
+  isMember: boolean;
+  points: number;
+  tier: string;
+  benefit?: string;
+  distance?: string;
+};
+
+export type ExploreCatalogResult = {
+  items: ExploreBusiness[];
+  categories: string[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+};
+
+export async function getExploreCatalog(params?: {
+  search?: string;
+  category?: string;
+  tab?: "all" | "memberships";
+  page?: number;
+  pageSize?: number;
+}): Promise<ExploreCatalogResult> {
+  const search = params?.search?.trim() ?? "";
+  const category = params?.category?.trim() ?? "";
+  const tab = params?.tab ?? "all";
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 10;
+
+  if (usesDjango) {
+    try {
+      const queryParts: string[] = [];
+      if (search) queryParts.push(`search=${encodeURIComponent(search)}`);
+      if (category && category !== "Todos") queryParts.push(`category=${encodeURIComponent(category)}`);
+      if (tab === "memberships") queryParts.push("membership=member");
+      queryParts.push(`page=${page}`);
+      queryParts.push(`page_size=${pageSize}`);
+      const qs = queryParts.length ? `?${queryParts.join("&")}` : "";
+
+      const data = await backendRequest<any>(`/discovery/${qs}`);
+      const catalog = data.catalog ?? [];
+      const rewards = data.rewards ?? [];
+      const campaigns = data.campaigns ?? [];
+
+      const items: ExploreBusiness[] = catalog.map((b: any) => {
+        const reward = rewards.find((r: any) => r.business_id === b.id);
+        const campaign = campaigns.find((c: any) => c.business_id === b.id);
+        const benefit = campaign?.name || reward?.name || (b.is_member ? `${b.points_balance} pts acumulados` : "Únete al comercio");
+
+        return {
+          id: b.id,
+          slug: b.slug,
+          name: b.name,
+          category: b.category,
+          description: b.description || "",
+          address: b.address || "",
+          city: b.city || "",
+          logoUrl: b.logo_url,
+          isAvailable: b.is_available ?? true,
+          isMember: Boolean(b.is_member),
+          points: b.points_balance ?? 0,
+          tier: b.tier || "Miembro",
+          benefit,
+          distance: "Cerca de ti"
+        };
+      });
+
+      const categories = ["Todos", ...Array.from(new Set(catalog.map((c: any) => c.category).filter(Boolean))) as string[]];
+
+      return {
+        items,
+        categories,
+        pagination: data.pagination ?? {
+          page,
+          pageSize,
+          total: items.length,
+          totalPages: 1,
+          hasNext: false,
+          hasPrev: false,
+        }
+      };
+    } catch {
+      // return fallback
+    }
+  }
+
+  return {
+    items: [
+      {
+        id: "demo-cafe",
+        slug: "cafe-central",
+        name: "Cafe Central",
+        category: "Cafeteria",
+        description: "Café de especialidad, postres y recompensas para clientes frecuentes.",
+        address: "Cra. 7 #45-12, Bogotá",
+        isAvailable: true,
+        isMember: true,
+        points: 120,
+        tier: "Frecuente",
+        benefit: "$5.000 credito",
+        distance: "350 m"
+      }
+    ],
+    categories: ["Todos", "Cafeteria"],
+    pagination: {
+      page: 1,
+      pageSize,
+      total: 1,
+      totalPages: 1,
+      hasNext: false,
+      hasPrev: false,
+    }
+  };
+}
+
+export type CommerceProfile = {
+  business: {
+    id: string;
+    slug: string;
+    name: string;
+    category: string;
+    description: string;
+    address: string;
+    city?: string;
+    logoUrl?: string;
+    isAvailable: boolean;
+    isMember: boolean;
+    points: number;
+    tier: string;
+    sedes: Array<{ id: string; name: string; address: string; city?: string }>;
+  };
+  membership: {
+    id: string;
+    points: number;
+    tier: string;
+    joinedAt?: string;
+  } | null;
+  stamps: {
+    currentStamps: number;
+    requiredStamps: number;
+    rewardName: string;
+    eligible: boolean;
+    condition?: string;
+  } | null;
+  rewards: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+    pointsRequired: number;
+    eligible: boolean;
+    condition: string;
+    remainingQuota?: number | null;
+  }>;
+  campaigns: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+    discountPercent?: number | null;
+    rewardPoints?: number;
+    eligible: boolean;
+    condition: string;
+    remainingQuota?: number | null;
+    alreadyRedeemed?: boolean;
+    endsAt?: string | null;
+  }>;
+  missions: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description: string;
+    goal: number;
+    rewardPoints: number;
+    eligible: boolean;
+    condition: string;
+  }>;
+  history: Array<[string, string, string]>;
+};
+
+export async function getCommerceProfile(slug: string, phase?: string): Promise<CommerceProfile> {
+  if (usesDjango) {
+    try {
+      const qs = phase ? `?phase=${encodeURIComponent(phase)}` : "";
+      const data = await backendRequest<any>(`/discovery/${slug}/${qs}`);
+      const b = data.business || {};
+      const m = data.membership;
+      const s = data.stamps;
+
+      return {
+        business: {
+          id: b.id || "biz-unknown",
+          slug: b.slug || slug,
+          name: b.name || "Comercio",
+          category: b.category || "General",
+          description: b.description || "",
+          address: b.address || "",
+          city: b.city || "",
+          logoUrl: b.logo_url,
+          isAvailable: b.is_available ?? true,
+          isMember: Boolean(b.is_member ?? m),
+          points: b.points_balance ?? m?.points_balance ?? 0,
+          tier: b.tier ?? m?.tier ?? "Miembro",
+          sedes: b.sedes || (b.address ? [{ id: b.id, name: "Sede Principal", address: b.address, city: b.city || "" }] : []),
+        },
+        membership: m ? {
+          id: m.id,
+          points: m.points_balance ?? 0,
+          tier: m.tier || "Miembro",
+          joinedAt: m.joined_at,
+        } : null,
+        stamps: s ? {
+          currentStamps: s.current_stamps ?? 0,
+          requiredStamps: s.required_stamps ?? 10,
+          rewardName: s.reward_name || "Recompensa de sellos",
+          eligible: Boolean(s.eligible),
+          condition: s.condition,
+        } : null,
+        rewards: (data.rewards || []).map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          description: r.description || "",
+          pointsRequired: r.points_required || 0,
+          eligible: Boolean(r.eligible),
+          condition: r.condition || (r.points_required ? `${r.points_required} pts requeridos (permanentes)` : "Para miembros"),
+          remainingQuota: r.remaining_quota,
+        })),
+        campaigns: (data.campaigns || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          description: c.description || "",
+          discountPercent: c.discount_percent,
+          rewardPoints: c.reward_points,
+          eligible: Boolean(c.eligible),
+          condition: c.condition || "Promoción especial",
+          remainingQuota: c.remaining_quota,
+          alreadyRedeemed: Boolean(c.already_redeemed),
+          endsAt: c.ends_at,
+        })),
+        missions: (data.missions || []).map((ms: any) => ({
+          id: ms.id,
+          name: ms.name,
+          category: ms.category,
+          description: ms.description || "",
+          goal: ms.goal || 1,
+          rewardPoints: ms.reward_points || 0,
+          eligible: Boolean(ms.eligible),
+          condition: ms.condition || `Meta: ${ms.goal}`,
+        })),
+        history: (data.activity || []).map((ev: any) => [
+          "Reciente",
+          ev.metadata?.label || ev.event_type,
+          formatEventValue(ev.points_delta || 0, ev.credit_delta_cents || 0)
+        ]),
+      };
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return {
+    business: {
+      id: "demo-cafe",
+      slug: "cafe-central",
+      name: "Cafe Central",
+      category: "Cafeteria",
+      description: "Café de especialidad, postres y recompensas para clientes frecuentes.",
+      address: "Cra. 7 #45-12, Bogotá",
+      city: "Bogotá",
+      isAvailable: true,
+      isMember: true,
+      points: 120,
+      tier: "Frecuente",
+      sedes: [{ id: "demo-cafe", name: "Sede Principal", address: "Cra. 7 #45-12, Bogotá", city: "Bogotá" }],
+    },
+    membership: {
+      id: "mem-demo",
+      points: 120,
+      tier: "Frecuente",
+    },
+    stamps: {
+      currentStamps: 6,
+      requiredStamps: 10,
+      rewardName: "Cafe gratis con 10 sellos",
+      eligible: false,
+      condition: "6/10 sellos acumulados (sellos independientes)",
+    },
+    rewards: [
+      {
+        id: "rew-1",
+        name: "Capuchino de la casa",
+        type: "product",
+        description: "Un capuchino mediano de grano especial",
+        pointsRequired: 100,
+        eligible: true,
+        condition: "Requiere 100 puntos acumulados (no se descuentan)",
+        remainingQuota: 10,
+      }
+    ],
+    campaigns: [
+      {
+        id: "camp-1",
+        name: "15% de descuento",
+        type: "discount_redeem",
+        description: "Descuento en compras mayores a $20.000",
+        discountPercent: 15,
+        eligible: true,
+        condition: "15% de descuento",
+        remainingQuota: 25,
+      }
+    ],
+    missions: [],
+    history: [
+      ["Hoy", "Visita registrada", "+15 pts"],
+      ["Ayer", "Café gratis", "Canjeado"]
+    ]
+  };
+}
+
+export type CustomerBenefitItem = {
+  id: string;
+  kind: "reward" | "promotion" | "mission";
+  title: string;
+  description: string;
+  businessId: string;
+  businessName: string;
+  businessSlug: string;
+  condition: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  remainingQuota?: number | null;
+  eligible: boolean;
+  actionType: "stamp_add" | "stamp_redeem" | "discount_redeem" | "points_boost";
+  payload: Record<string, unknown>;
+};
+
+export type CustomerBenefitsResult = {
+  items: CustomerBenefitItem[];
+  availableTabs: Array<"Todos" | "Recompensas" | "Promociones" | "Misiones">;
+  stats: {
+    totalPoints: number;
+    totalStamps: number;
+    availableCount: number;
+  };
+};
+
+export async function getCustomerBenefits(phase?: string): Promise<CustomerBenefitsResult> {
+  const isV1 = phase === "v1" || process.env.NEXT_PUBLIC_LOYLOOP_PHASE === "v1";
+  const availableTabs: Array<"Todos" | "Recompensas" | "Promociones" | "Misiones"> = isV1
+    ? ["Todos", "Recompensas", "Promociones", "Misiones"]
+    : ["Todos", "Recompensas", "Promociones"];
+
+  if (usesDjango) {
+    try {
+      const qs = phase ? `?phase=${encodeURIComponent(phase)}` : "";
+      const data = await backendRequest<any>(`/discovery/${qs}`);
+      const rewards = data.rewards || [];
+      const campaigns = data.campaigns || [];
+      const missions = isV1 ? (data.missions || []) : [];
+      const memberships = data.memberships || [];
+
+      const totalPoints = memberships.reduce((acc: number, m: any) => acc + (m.points_balance || 0), 0);
+
+      const items: CustomerBenefitItem[] = [];
+
+      // 1. Recompensas
+      for (const r of rewards) {
+        items.push({
+          id: r.id,
+          kind: "reward",
+          title: r.name,
+          description: r.description || "Recompensa del comercio",
+          businessId: r.business_id,
+          businessName: r.business_name || "Comercio",
+          businessSlug: r.business_slug || "cafe-central",
+          condition: r.condition || (r.points_required ? `${r.points_required} pts requeridos` : "Para miembros"),
+          remainingQuota: r.remaining_quota,
+          eligible: Boolean(r.eligible),
+          actionType: r.type === "discount" ? "discount_redeem" : "stamp_redeem",
+          payload: { rewardId: r.id, name: r.name },
+        });
+      }
+
+      // 2. Promociones
+      for (const c of campaigns) {
+        items.push({
+          id: c.id,
+          kind: "promotion",
+          title: c.name,
+          description: c.description || "Promoción especial",
+          businessId: c.business_id,
+          businessName: c.business_name || "Comercio",
+          businessSlug: c.business_slug || "cafe-central",
+          condition: c.condition || `${c.discount_percent || 0}% de descuento`,
+          startsAt: c.starts_at,
+          endsAt: c.ends_at,
+          remainingQuota: c.remaining_quota,
+          eligible: Boolean(c.eligible),
+          actionType: c.type === "points_boost" ? "points_boost" : "discount_redeem",
+          payload: { campaignId: c.id, name: c.name },
+        });
+      }
+
+      // 3. Misiones (solo si isV1)
+      if (isV1) {
+        for (const m of missions) {
+          items.push({
+            id: m.id,
+            kind: "mission",
+            title: m.name,
+            description: m.description || "",
+            businessId: m.business_id,
+            businessName: m.business_name || "Comercio",
+            businessSlug: m.business_slug || "cafe-central",
+            condition: m.condition || `Meta: ${m.goal}`,
+            startsAt: m.starts_at,
+            endsAt: m.ends_at,
+            eligible: Boolean(m.eligible),
+            actionType: "stamp_add",
+            payload: { missionId: m.id },
+          });
+        }
+      }
+
+      const availableCount = items.filter((item) => item.eligible).length;
+
+      return {
+        items,
+        availableTabs,
+        stats: {
+          totalPoints,
+          totalStamps: 6,
+          availableCount,
+        },
+      };
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Fallback demo data
+  return {
+    items: [
+      {
+        id: "demo-reward-1",
+        kind: "reward",
+        title: "Capuchino de la casa",
+        description: "Bebida caliente de especialidad",
+        businessId: "demo-cafe",
+        businessName: "Cafe Central",
+        businessSlug: "cafe-central",
+        condition: "Requiere 100 puntos acumulados (no se descuentan)",
+        remainingQuota: 10,
+        eligible: true,
+        actionType: "stamp_redeem",
+        payload: { rewardId: "demo-reward-1" },
+      },
+      {
+        id: "demo-campaign-1",
+        kind: "promotion",
+        title: "15% de descuento",
+        description: "En pastelería y repostería",
+        businessId: "demo-cafe",
+        businessName: "Cafe Central",
+        businessSlug: "cafe-central",
+        condition: "15% de descuento",
+        remainingQuota: 20,
+        eligible: true,
+        actionType: "discount_redeem",
+        payload: { campaignId: "demo-campaign-1" },
+      },
+    ],
+    availableTabs,
+    stats: {
+      totalPoints: 120,
+      totalStamps: 6,
+      availableCount: 2,
+    },
   };
 }

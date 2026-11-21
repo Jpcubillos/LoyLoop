@@ -36,6 +36,7 @@ export function ClaimQr({
 }: ClaimQrProps) {
   const [open, setOpen] = useState(false);
   const [claimCode, setClaimCode] = useState("");
+  const [manualCode, setManualCode] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -65,6 +66,7 @@ export function ClaimQr({
     }
 
     setClaimCode(result.code);
+    setManualCode(result.manualCode || "");
     setExpiresAt(result.expiresAt);
   }
 
@@ -114,8 +116,13 @@ export function ClaimQr({
                 )}
               </div>
               <div className="mt-4 rounded-lg bg-white p-3 text-center">
-                <p className="text-xs font-bold uppercase text-muted">Codigo de validacion</p>
-                <p className="mt-1 font-black tracking-wide text-ink">{claimCode || "..."}</p>
+                <p className="text-xs font-bold uppercase text-muted">Código para ingresar manualmente</p>
+                <p
+                  className="mt-1 font-mono font-black tracking-widest text-lg text-ink"
+                  aria-label={`Código manual de 16 dígitos: ${manualCode || claimCode}`}
+                >
+                  {manualCode ? manualCode.match(/.{1,4}/g)?.join(" ") : claimCode || "..."}
+                </p>
               </div>
             </div>
 
@@ -123,15 +130,19 @@ export function ClaimQr({
               <div className="flex gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
                 <p className="text-sm leading-6 text-emerald-800">
-                  Muestrale este QR al comercio. Al escanearlo desde su panel se valida la accion y se actualizan tus beneficios.
+                  Muéstrale este QR o el código manual al comercio. Al confirmarlo desde su panel se valida la acción y se actualizan tus beneficios.
                 </p>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
-              <button className="btn-secondary text-xs" onClick={() => navigator.clipboard?.writeText(claimCode)} disabled={!claimCode}>
+              <button
+                className="btn-secondary text-xs"
+                onClick={() => navigator.clipboard?.writeText(manualCode || claimCode)}
+                disabled={!claimCode}
+              >
                 <Copy className="h-4 w-4" />
-                Copiar
+                Copiar código
               </button>
               <button className="btn-primary text-xs" onClick={() => setOpen(false)}>
                 Listo

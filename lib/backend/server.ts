@@ -15,7 +15,7 @@ export async function backendRequest<T>(path:string, method='GET', body?:unknown
   if (!token && !publicLead) throw new BackendError(401);
   let base:URL;
   try { base=new URL(process.env.LOYLOOP_DJANGO_API_URL || ''); } catch { throw new BackendError(503); }
-  if (base.protocol!=='https:' || base.username || base.password || base.search || base.hash || base.pathname!=='/' || !/^\/[a-zA-Z0-9_/-]+\/$/.test(path)) throw new BackendError(503);
+  if (base.protocol!=='https:' || base.username || base.password || base.search || base.hash || base.pathname!=='/' || !/^\/[a-zA-Z0-9_/-]+\/(?:\?[a-zA-Z0-9_=&%-]*)?$/.test(path)) throw new BackendError(503);
   let response:Response;
   try {
     response=await fetch(base.origin+'/api'+path,{

@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { CommerceCard } from "@/components/CommerceCard";
 import {
   CategoryChip,
@@ -17,9 +17,13 @@ import {
   SectionHeader,
   Sheet,
   Tabs,
+  Txt,
+  ui,
 } from "@/components/ui/loyloop";
 import { useResource } from "@/hooks/use-resource";
 import { getBusinesses } from "@/lib/loyloop-data";
+
+const PAGE_SIZE = 8;
 export default function ComerciosScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
   const [tab, setTab] = useState<"Mis comercios" | "Explorar">(
@@ -29,11 +33,15 @@ export default function ComerciosScreen() {
   const [category, setCategory] = useState("Todos");
   const [sort, setSort] = useState<SortOrder>("Más usados");
   const [map, setMap] = useState(false);
+  const [page, setPage] = useState(1);
   const { data = [], loading, error, reload } = useResource(getBusinesses);
   useEffect(() => {
     if (params.tab)
       setTab(params.tab === "explorar" ? "Explorar" : "Mis comercios");
   }, [params.tab]);
+  useEffect(() => {
+    setPage(1);
+  }, [query, category, tab, sort]);
   const filtered = useMemo(() => {
     const normalize = (v: string) =>
       v
@@ -59,6 +67,11 @@ export default function ComerciosScreen() {
               : b.points - a.points,
       );
   }, [data, tab, query, category, sort]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
   return (
     <Screen padding={16}>
       <Header title="Comercios" />
@@ -120,19 +133,82 @@ export default function ComerciosScreen() {
         onPress={() => setMap(true)}
       />
       <View style={{ gap: 10 }}>
-        {filtered.map((b) => (
+        {paginated.map((b) => (
           <CommerceCard key={b.id} business={b} />
         ))}
       </View>
+      {filtered.length > PAGE_SIZE && (
+        <View
+          style={[
+            ui.row,
+            {
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 12,
+              paddingHorizontal: 4,
+            },
+          ]}
+        >
+          <Txt size={12} color="#756F7C">
+            Página {page} de {totalPages} ({filtered.length} comercios)
+          </Txt>
+          <View style={[ui.row, { gap: 8 }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Página anterior"
+              disabled={page <= 1}
+              onPress={() => setPage((p) => Math.max(1, p - 1))}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: page <= 1 ? "#F1F5F9" : "#FFF",
+                borderWidth: 1,
+                borderColor: "#E2E8F0",
+                opacity: page <= 1 ? 0.4 : 1,
+              }}
+            >
+              <Txt size={12} weight="medium">
+                Anterior
+              </Txt>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Página siguiente"
+              disabled={page >= totalPages}
+              onPress={() => setPage((p) => Math.min(totalPages, p + 1))}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: page >= totalPages ? "#F1F5F9" : "#FFF",
+                borderWidth: 1,
+                borderColor: "#E2E8F0",
+                opacity: page >= totalPages ? 0.4 : 1,
+              }}
+            >
+              <Txt size={12} weight="medium">
+                Siguiente
+              </Txt>
+            </Pressable>
+          </View>
+        </View>
+      )}
       {!loading && !error && !filtered.length && (
         <Empty
           title={
-            query ? "No encontramos coincidencias" : "Aquí empieza tu comunidad"
+            query || category !== "Todos"
+              ? "No encontramos coincidencias"
+              : tab === "Mis comercios"
+                ? "Aquí empieza tu comunidad"
+                : "No hay comercios disponibles"
           }
           description={
-            query
+            query || category !== "Todos"
               ? "Prueba con otro nombre o categoría."
-              : "Explora un comercio o escanea su QR para unirte."
+              : tab === "Mis comercios"
+                ? "Explora comercios o escanea su QR para unirte."
+                : "Pronto se sumarán más comercios en tu zona."
           }
         />
       )}

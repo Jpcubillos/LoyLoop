@@ -11,7 +11,7 @@ from datetime import timedelta
 from uuid import UUID
 
 from django.db import connection, transaction
-from django.db.models import F
+from django.db.models import F, Case, When
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import serializers
@@ -22,7 +22,7 @@ from config.telemetry import tenant
 from .models import (ActivityReceipt, Business, BusinessMembership, Campaign,
                      CampaignRedemption, ClaimRequest, CustomerProfile,
                      IdentityChallenge, LoyaltyEvent, Reward, StampCard,
-                     StampCompletion, RewardRedemption)
+                     StampCompletion, RewardRedemption, BusinessAwardRule)
 
 
 class Conflict(APIException):
@@ -120,16 +120,72 @@ def _reference(value):
     return value
 
 
+def compute_member_tier(points):
+    if points >= 500:
+        return 'VIP'
+    if points >= 250:
+        return 'Distinguido'
+    if points >= 100:
+        return 'Frecuente'
+    return 'Miembro'
+
+
+def get_active_award_rule(business):
+    rule = BusinessAwardRule.objects.filter(business=business, active=True).order_by('-version').first()
+    if not rule:
+        rule = BusinessAwardRule.objects.create(
+            business=business, points_per_purchase=10, stamps_per_purchase=1,
+            stamps_enabled=True, min_purchase_cents=0, version=1, active=True
+        )
+    return rule
+
+
+@transaction.atomic
+def set_business_award_rule(*, business, points_per_purchase, stamps_per_purchase, stamps_enabled, min_purchase_cents=0, actor_id=None):
+    if not isinstance(points_per_purchase, int) or isinstance(points_per_purchase, bool) or not 0 <= points_per_purchase <= 100000:
+        invalid('Puntos por compra fuera de rango.')
+    if not isinstance(stamps_per_purchase, int) or isinstance(stamps_per_purchase, bool) or not 0 <= stamps_per_purchase <= 20:
+        invalid('Sellos por compra fuera de rango.')
+    if not (points_per_purchase or (stamps_enabled and stamps_per_purchase)):
+        invalid('La regla debe otorgar puntos o sellos.')
+    current = BusinessAwardRule.objects.select_for_update().filter(business=business, active=True).order_by('-version').first()
+    new_version = (current.version + 1) if current else 1
+    if current:
+        BusinessAwardRule.objects.filter(business=business, active=True).update(active=False)
+    rule = BusinessAwardRule.objects.create(
+        business=business,
+        points_per_purchase=points_per_purchase,
+        stamps_per_purchase=stamps_per_purchase,
+        stamps_enabled=stamps_enabled,
+        min_purchase_cents=min_purchase_cents,
+        version=new_version,
+        active=True,
+        effective_from=timezone.now(),
+    )
+    if actor_id:
+        audit_success(actor_id, business.id)
+    return rule
+
+
 @transaction.atomic
 def record_confirmed_activity(*, business, membership_id, actor_id, reference,
-                              points, stamps=0, card_id=None, reason=''):
+                              points=None, stamps=None, card_id=None, reason=''):
     """A verified merchant records ONE externally confirmed activity.
 
     The business+reference constraint and advisory key lock serialize duplicate
     submits, even if they target different memberships or arrive on workers.
     Membership row lock protects counters from concurrent claims.
+    Rules are versioned per business; changes never alter historical records.
     """
     reference = _reference(reference)
+    active_rule = get_active_award_rule(business)
+    rule_version = active_rule.version
+
+    if points is None:
+        points = active_rule.points_per_purchase
+    if stamps is None:
+        stamps = active_rule.stamps_per_purchase if active_rule.stamps_enabled else 0
+
     if not isinstance(points, int) or isinstance(points, bool) or not 0 <= points <= 100000:
         invalid('Puntos fuera de rango.')
     if not isinstance(stamps, int) or isinstance(stamps, bool) or not 0 <= stamps <= 20:
@@ -169,17 +225,20 @@ def record_confirmed_activity(*, business, membership_id, actor_id, reference,
         # Never subtract points: these are historical, permanent per business.
         member.points_balance = F('points_balance') + points
         member.save(update_fields=['points_balance'])
+        member.refresh_from_db()
+        member.tier = compute_member_tier(member.points_balance)
+        member.save(update_fields=['tier'])
     if card:
         card.current_stamps = F('current_stamps') + stamps
         card.updated_at = timezone.now()
         card.save(update_fields=['current_stamps', 'updated_at'])
     event = LoyaltyEvent.objects.create(business=business, customer_id=member.customer_id,
         event_type='purchase', points_delta=points,
-        metadata={'reference': reference, 'stamps_awarded': stamps,
+        metadata={'reference': reference, 'stamps_awarded': stamps, 'rule_version': rule_version,
                   'stamp_card_id': str(card_uuid) if card_uuid else None, 'reason': reason.strip()})
     receipt = ActivityReceipt.objects.create(business=business, customer_id=member.customer_id,
         event=event, reference=reference, fingerprint=fingerprint, actor_id=actor_id,
-        points_awarded=points, stamps_awarded=stamps, card=card)
+        points_awarded=points, stamps_awarded=stamps, card=card, rule_version=rule_version)
     audit_success(actor_id, business.id)
     return receipt, True
 
@@ -187,7 +246,57 @@ def record_confirmed_activity(*, business, membership_id, actor_id, reference,
 def activity_result(receipt):
     return {'id': str(receipt.id), 'eventId': str(receipt.event_id),
             'pointsAwarded': receipt.points_awarded, 'stampsAwarded': receipt.stamps_awarded,
+            'ruleVersion': receipt.rule_version,
+            'reversed': bool(receipt.reversed_at),
             'appliedAt': receipt.created_at.isoformat()}
+
+
+@transaction.atomic
+def reverse_confirmed_activity(*, business, receipt_id, actor_id, reason=''):
+    """An exceptional reversal for an activity receipt.
+
+    Reversals are audited and never presented as a points redemption.
+    """
+    if not isinstance(reason, str) or not 5 <= len(reason.strip()) <= 200:
+        invalid('Indica el motivo del reverso (5-200 caracteres).')
+    try:
+        rec_uuid = UUID(str(receipt_id))
+    except (ValueError, TypeError):
+        invalid('Identificador de actividad no valido.')
+    receipt = get_object_or_404(ActivityReceipt.objects.select_for_update(), pk=rec_uuid, business=business)
+    if receipt.reversed_at is not None:
+        raise Conflict('Esta actividad ya fue reversada.')
+    member = get_object_or_404(BusinessMembership.objects.select_for_update(), business=business, customer_id=receipt.customer_id)
+    if receipt.points_awarded:
+        member.points_balance = Case(
+            When(points_balance__gte=receipt.points_awarded, then=F('points_balance') - receipt.points_awarded),
+            default=0
+        )
+        member.save(update_fields=['points_balance'])
+        member.refresh_from_db()
+        member.tier = compute_member_tier(member.points_balance)
+        member.save(update_fields=['tier'])
+    if receipt.stamps_awarded and receipt.card_id:
+        card = StampCard.objects.select_for_update().filter(pk=receipt.card_id, business=business).first()
+        if card:
+            card.current_stamps = Case(
+                When(current_stamps__gte=receipt.stamps_awarded, then=F('current_stamps') - receipt.stamps_awarded),
+                default=0
+            )
+            card.updated_at = timezone.now()
+            card.save(update_fields=['current_stamps', 'updated_at'])
+    receipt.reversed_at = timezone.now()
+    receipt.reversed_by = actor_id
+    receipt.reversal_reason = reason.strip()
+    receipt.save(update_fields=['reversed_at', 'reversed_by', 'reversal_reason'])
+    # Reversals are recorded as purchase adjustments with negative points; NEVER as a redemption.
+    LoyaltyEvent.objects.create(
+        business=business, customer=member.customer, event_type='purchase',
+        points_delta=-receipt.points_awarded,
+        metadata={'reversal': True, 'reversed_receipt_id': str(receipt.id), 'label': 'Reverso de actividad', 'reason': reason.strip()}
+    )
+    audit_success(actor_id, business.id)
+    return {'ok': True, 'receiptId': str(receipt.id), 'reversedAt': receipt.reversed_at.isoformat()}
 
 
 @transaction.atomic
@@ -363,4 +472,57 @@ def confirm_claim(*, business, code, actor_id):
     claim.approved_at = timezone.now()
     claim.save(update_fields=['status','approved_at'])
     audit_success(actor_id, business.id)
-    return {'ok':True,'message':'Validacion aplicada correctamente.','httpStatus':200}
+    return {'ok':True,'message':'Validacion aplicada correctamente.','httpStatus':200,
+            'customerName': claim.customer.full_name, 'actionType': claim.action_type}
+
+
+def preview_claim(*, business, code):
+    if not isinstance(code, str) or not 1 <= len(code.strip()) <= 128:
+        invalid('Ingresa un codigo valido.')
+    normalized = code.strip().upper()
+    claim = ClaimRequest.objects.filter(code=normalized, business=business).first()
+    if claim is None and normalized.isdigit() and len(normalized) == 16:
+        claim = ClaimRequest.objects.filter(manual_code_hash=_digest(normalized), business=business).first()
+    if claim is None:
+        from django.http import Http404
+        raise Http404()
+    if claim.status != 'pending':
+        raise Conflict('Este codigo ya fue procesado.')
+    if claim.expires_at <= timezone.now():
+        claim.status = 'expired'
+        claim.save(update_fields=['status'])
+        raise Conflict('El codigo ha expirado.')
+
+    membership = BusinessMembership.objects.filter(business=business, customer_id=claim.customer_id).first()
+    if not membership:
+        invalid('El cliente no es miembro de este comercio.')
+
+    benefit_title = 'Beneficio'
+    detail = ''
+    if claim.action_type in {'stamp_add', 'stamp_redeem'}:
+        card = stamp_card(business, claim.customer, create=False)
+        benefit_title = 'Sumar sello' if claim.action_type == 'stamp_add' else 'Redimir tarjeta'
+        detail = f"{card.current_stamps}/{card.required_stamps} sellos ({card.reward_name})"
+    elif claim.action_type == 'discount_redeem' and claim.payload.get('rewardId'):
+        reward = eligible_reward(business, claim.customer, claim.payload['rewardId'], membership.points_balance)
+        benefit_title = reward.name
+        detail = reward.description or f"Recompensa ({reward.type})"
+    else:
+        campaign = eligible_campaign(business, claim.customer, claim.action_type, claim.payload.get('campaignId'))
+        benefit_title = campaign.name
+        detail = f"{campaign.discount_percent}% de descuento" if campaign.discount_percent else f"+{campaign.reward_points} puntos"
+
+    return {
+        'ok': True,
+        'claimId': str(claim.id),
+        'code': claim.code,
+        'customerName': claim.customer.full_name,
+        'customerId': str(claim.customer.id),
+        'actionType': claim.action_type,
+        'benefitTitle': benefit_title,
+        'detail': detail,
+        'expiresAt': claim.expires_at.isoformat(),
+        'status': claim.status,
+        'canConfirm': True,
+    }
+

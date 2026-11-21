@@ -279,12 +279,14 @@ export default function ComercioDetalleScreen() {
                 ))}
               </ScrollView>
             </View>
-            <View style={{ gap: 10 }}>
-              <SectionHeader title="Misiones activas" />
-              {detail.missions.map((o) => (
-                <MissionCard key={o.id} offer={o} />
-              ))}
-            </View>
+            {detail.missions.length > 0 && (
+              <View style={{ gap: 10 }}>
+                <SectionHeader title="Misiones activas" />
+                {detail.missions.map((o) => (
+                  <MissionCard key={o.id} offer={o} />
+                ))}
+              </View>
+            )}
             <SectionHeader title="Ubicaciones" />
             <Locations locations={detail.locations} />
             <View
