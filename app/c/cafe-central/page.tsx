@@ -125,11 +125,43 @@ export default async function CafeCentralPage({
               />
               {customerState.availableRewards.map((reward) => {
                 const Icon = rewardIcons[reward.type] ?? Gift;
+                const pointsReq = reward.pointsRequired ?? 0;
+                const eligible = customerState.points >= pointsReq;
                 const requirement = reward.pointsRequired
-                  ? `${reward.pointsRequired} puntos`
+                  ? `${reward.pointsRequired} pts acumulados`
                   : reward.creditAmountCents
                     ? formatCurrency(reward.creditAmountCents)
                     : "Disponible en caja";
+
+                if ((reward.type === "discount" || reward.type === "product") && eligible) {
+                  return (
+                    <ClaimQr
+                      key={reward.id}
+                      action="discount_redeem"
+                      label={reward.name}
+                      description={`Presenta este código al comercio. Tus ${customerState.points} puntos no se gastan.`}
+                      payload={{
+                        rewardId: reward.id,
+                        campaignName: reward.name
+                      }}
+                      className="block w-full rounded-lg border border-line bg-white p-4 text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-black">{reward.name}</p>
+                          <p className="text-xs text-muted">{reward.description} · Tus puntos se conservan</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-black text-emerald-800">
+                          {requirement}
+                        </span>
+                        <ChevronRight className="h-4 w-4 text-muted" />
+                      </div>
+                    </ClaimQr>
+                  );
+                }
 
                 return (
                   <div key={reward.id} className="rounded-lg border border-line bg-white p-4">

@@ -135,3 +135,22 @@ test('business profile update uses the server-authorized tenant and requires val
   const emptyFormData={get:(k)=>k==='name'?'':formData.get(k)};
   await assert.rejects(appUsers.updateBusinessProfile(emptyFormData),/El nombre del comercio es obligatorio/);
 });
+
+test('discovery endpoint requires valid route format and propagates customer session',async()=>{
+  const {state,load}=fixture();state.token='customer-session';
+  const api=load('lib/backend/server.ts');
+  state.result={
+    rewards:[{id:'r-1',name:'Cafe gratis',points_required:100,remaining_quota:5,eligible:true}],
+    campaigns:[{id:'c-1',name:'10% off',discount_percent:10,remaining_quota:10,eligible:true}],
+    missions:[{id:'m-1',name:'Compra 2',goal:2,eligible:true}],
+    stamps:{current_stamps:6,required_stamps:10,eligible:false}
+  };
+  const discovery=await api.backendRequest('/discovery/cafe-central/','GET');
+  assert.equal(discovery.rewards[0].points_required,100);
+  assert.equal(discovery.rewards[0].remaining_quota,5);
+  assert.equal(discovery.campaigns[0].eligible,true);
+  const call=state.calls.find(c=>c.url==='https://backend.example/api/discovery/cafe-central/');
+  assert.ok(call);
+  assert.equal(call.options.headers.Authorization,'Bearer customer-session');
+});
+

@@ -260,6 +260,42 @@ def main():
     assert client.get('/api/v1/platform/overview/').status_code==200
     assert client.get('/api/v1/plans/').data[0]['price'] is None
     assert client.get(f'/api/v1/businesses/{other.id}/memberships/').status_code==403
+
+    # LL-25: Discovery catalog distinguishes rewards, campaigns, missions, shows eligibility & quota.
+    client.force_authenticate(actors['customer'])
+    Mission.objects.create(business=business, name='Visita dos veces', category='frequency',
+                           goal=2, reward_points=40, audience_segment='active')
+    reward_eligible = Reward.objects.create(business=business, name='Postre de cortesía', type='product',
+                                            audience_segment='active', points_required=150, redemption_limit=5)
+    reward_locked = Reward.objects.create(business=business, name='Cena premium', type='product',
+                                          audience_segment='active', points_required=500, redemption_limit=2)
+
+    disc_res = client.get(f'/api/v1/discovery/{business.slug}/')
+    assert disc_res.status_code == 200, disc_res.data
+    disc_data = disc_res.data
+    assert 'rewards' in disc_data and 'campaigns' in disc_data and 'missions' in disc_data
+    assert 'stamps' in disc_data and 'membership' in disc_data and 'activity' in disc_data
+
+    # Points balance is permanent and acts strictly as qualification threshold
+    assert disc_data['membership']['points_balance'] == 195
+    postre = next(r for r in disc_data['rewards'] if r['id'] == str(reward_eligible.id))
+    assert postre['eligible'] is True
+    assert postre['remaining_quota'] == 5
+    assert 'Requiere 150 puntos' in postre['condition']
+
+    cena = next(r for r in disc_data['rewards'] if r['id'] == str(reward_locked.id))
+    assert cena['eligible'] is False
+    assert cena['remaining_quota'] == 2
+
+    # Stamps are separate from points balance
+    assert disc_data['stamps']['current_stamps'] == 0
+    assert disc_data['stamps']['required_stamps'] == 3
+    assert disc_data['stamps']['eligible'] is False
+
+    # Activity only reflects confirmed events, no unvalidated/phantom claims
+    for ev in disc_data['activity']:
+        assert ev['event_type'] in {'purchase', 'stamp', 'reward_redeem', 'mission_progress'}
+
     # SQL account closure must also cascade the NEW domain ledger rows.
     # Old Django-only on_delete would have blocked the Supabase SQL function.
     with connection.cursor() as cursor:

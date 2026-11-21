@@ -142,8 +142,56 @@ export async function getCafeCentralCustomerState(): Promise<CafeCentralCustomer
     ]
   };
 
-  if (usesDjango) Object.assign(fallback,{points:0,creditCents:0,tier:"Sin membresia",currentStamps:0,requiredStamps:10,availableCampaigns:[],availableRewards:[],availableMissions:[],history:[]});
-  const identity=usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}) : null;
+  if (usesDjango) {
+    try {
+      const data = await backendRequest<any>("/discovery/cafe-central/", "GET");
+      if (data) {
+        const stamps = data.stamps;
+        const membership = data.membership;
+        return {
+          points: membership?.points_balance ?? 0,
+          creditCents: membership?.credit_balance_cents ?? 0,
+          tier: membership?.tier ?? "Sin membresia",
+          currentStamps: stamps?.current_stamps ?? 0,
+          requiredStamps: stamps?.required_stamps ?? 10,
+          availableCampaigns: (data.campaigns ?? []).map((c: any) => ({
+            id: c.id,
+            name: c.name,
+            type: c.type,
+            description: c.description ?? "",
+            discountPercent: c.discount_percent,
+            rewardPoints: c.reward_points ?? 0
+          })),
+          availableRewards: (data.rewards ?? []).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            type: r.type,
+            description: r.description ?? "",
+            pointsRequired: r.points_required,
+            creditAmountCents: r.credit_amount_cents
+          })),
+          availableMissions: (data.missions ?? []).map((m: any) => ({
+            id: m.id,
+            name: m.name,
+            category: m.category,
+            description: m.description ?? "",
+            goal: m.goal ?? 1,
+            progress: (data.progress ?? []).find((p: any) => p.mission_id === m.id)?.progress ?? 0,
+            rewardPoints: m.reward_points ?? 0
+          })),
+          history: (data.activity ?? []).map((ev: any) => [
+            "Reciente",
+            ev.metadata?.label ?? ev.event_type,
+            formatEventValue(ev.points_delta ?? 0, ev.credit_delta_cents ?? 0)
+          ])
+        };
+      }
+    } catch {
+      // Fallback if not authenticated or offline
+    }
+  }
+
+  const identity = usesDjango ? await backendRequest<{customer_id:string}>("/customer-identity/","POST",{}).catch(() => null) : null;
 
   const { data: business, error: businessError } = await db
     .from("businesses")

@@ -6,6 +6,7 @@ export function canClaimOffer(
     requiredStamps?: number;
     startsAt?: string;
     endsAt?: string;
+    remainingCapacity?: number | null;
   },
   member: { isMember: boolean; points: number; stamps: number },
   now = Date.now(),
@@ -13,6 +14,12 @@ export function canClaimOffer(
   if (!member.isMember || offer.kind === "mission") return false;
   if (offer.startsAt && Date.parse(offer.startsAt) > now) return false;
   if (offer.endsAt && Date.parse(offer.endsAt) <= now) return false;
+  if (
+    offer.remainingCapacity !== undefined &&
+    offer.remainingCapacity !== null &&
+    offer.remainingCapacity <= 0
+  )
+    return false;
   return (
     member.points >= (offer.requiredPoints ?? 0) &&
     member.stamps >= (offer.requiredStamps ?? 0)

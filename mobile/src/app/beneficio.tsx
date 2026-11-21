@@ -113,6 +113,28 @@ export default function BenefitDetailScreen() {
                 Validación presencial en {offer.businessName}
               </Txt>
             </View>
+            {offer.remainingCapacity !== undefined && offer.remainingCapacity !== null && (
+              <View style={ui.row}>
+                <Icon name="people-outline" color="#52618B" />
+                <Txt
+                  size={13}
+                  color={offer.remainingCapacity > 0 ? c.muted : c.cta}
+                  style={{ flex: 1 }}
+                >
+                  {offer.remainingCapacity > 0
+                    ? `Cupo disponible: ${offer.remainingCapacity} canjes restantes`
+                    : "Cupo agotado para este beneficio"}
+                </Txt>
+              </View>
+            )}
+            {!!offer.condition && (
+              <View style={ui.row}>
+                <Icon name="checkmark-circle-outline" color="#52618B" />
+                <Txt size={13} color={c.muted} style={{ flex: 1 }}>
+                  Condición: {offer.condition}
+                </Txt>
+              </View>
+            )}
             {!!offer.requiredPoints && (
               <View style={ui.row}>
                 <Icon name="ribbon-outline" color="#52618B" />
@@ -172,13 +194,23 @@ export default function BenefitDetailScreen() {
           >
             <Txt>{offer.description}</Txt>
             <Txt color={c.muted}>
-              {offer.meta}. Requiere membresía activa y validación del comercio.
-              Cada QR es de un solo uso.
+              {offer.meta}. Requiere membresía activa y validación presencial del comercio.
+              Cada QR o código manual es de un solo uso.
             </Txt>
+            {!!offer.condition && (
+              <Txt color={c.muted}>
+                Condición: {offer.condition}
+              </Txt>
+            )}
+            {offer.remainingCapacity !== undefined && offer.remainingCapacity !== null && (
+              <Txt color={c.muted}>
+                Cupo límite: {offer.redemptionLimit ?? offer.remainingCapacity}. Disponibles: {offer.remainingCapacity}.
+              </Txt>
+            )}
             {!!offer.requiredPoints && (
               <Txt color={c.muted}>
-                Requiere {offer.requiredPoints} puntos de fidelidad. Los puntos
-                se conservan.
+                Requiere {offer.requiredPoints} puntos de fidelidad acumulados. Los puntos
+                se conservan y no se descuentan al canjear.
               </Txt>
             )}
           </Sheet>
